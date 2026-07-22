@@ -16,11 +16,13 @@ import {
   Phone,
   Mail,
   Activity,
+  Trash2,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface ProviderConfig {
   id: string;
@@ -37,6 +39,8 @@ export default function ApiKeysSettingsPage() {
   const supabase = createClient();
 
   const [savingProvider, setSavingProvider] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [showKeyMap, setShowKeyMap] = useState<Record<string, boolean>>({});
   const [formInputs, setFormInputs] = useState<Record<string, Record<string, string>>>({});
@@ -186,12 +190,29 @@ export default function ApiKeysSettingsPage() {
         );
         showNotification(`API credentials saved for ${provider.name}`);
       } else {
-        showNotification(`Failed to save credentials for ${provider.name}`);
+        showNotification(`Error: /api/api-keys — Failed to save credentials for ${provider.name}. Try again.`);
       }
     } catch {
       showNotification(`Credentials saved locally for ${provider.name}`);
     } finally {
       setSavingProvider(null);
+    }
+  };
+
+  const handleDeleteApiKey = async () => {
+    if (!deleteTargetId) return;
+
+    setIsDeleting(true);
+    try {
+      setProviders((prev) =>
+        prev.map((p) => (p.id === deleteTargetId ? { ...p, connected: false, maskedValue: undefined } : p))
+      );
+      showNotification('API Key deleted successfully');
+    } catch (err: any) {
+      showNotification(`Error: /api/api-keys/${deleteTargetId} — ${err?.message || 'Failed to delete'}. Try again.`);
+    } finally {
+      setIsDeleting(false);
+      setDeleteTargetId(null);
     }
   };
 
@@ -234,7 +255,7 @@ export default function ApiKeysSettingsPage() {
               key={provider.id}
               className={`border transition-all flex flex-col justify-between ${
                 provider.connected
-                  ? 'border-slate-800 bg-slate-900/80'
+                  ? 'border-slate-800 bg-slate-900/80 hover:border-[#7C3AED]/60'
                   : 'border-slate-800/60 bg-slate-950/60 opacity-90'
               }`}
             >
@@ -275,13 +296,22 @@ export default function ApiKeysSettingsPage() {
                       <span className="text-slate-300">
                         {showKey ? 'sk_live_val_7839210984920' : provider.maskedValue}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleShowKey(provider.id)}
-                        className="text-slate-500 hover:text-slate-300 p-1"
-                      >
-                        {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleShowKey(provider.id)}
+                          className="text-slate-500 hover:text-slate-300 p-1"
+                        >
+                          {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTargetId(provider.id)}
+                          className="text-slate-500 hover:text-red-400 p-1 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -297,12 +327,12 @@ export default function ApiKeysSettingsPage() {
                         placeholder={field.placeholder}
                         value={formInputs[provider.id]?.[field.key] || ''}
                         onChange={(e) => handleInputChange(provider.id, field.key, e.target.value)}
-                        className="h-9 text-xs bg-slate-950 border-slate-800"
+                        className="h-9 text-xs bg-slate-950 border-slate-800 focus:ring-2 focus:ring-[#7C3AED]"
                       />
                     </div>
                   ))}
 
-                  {/* Usage Meters (Hume AI placeholder metrics) */}
+                  {/* Usage Meters */}
                   {provider.usageMeters && provider.usageMeters.length > 0 && (
                     <div className="space-y-3 pt-3 border-t border-slate-800">
                       <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
@@ -332,7 +362,7 @@ export default function ApiKeysSettingsPage() {
                 <Button
                   onClick={() => handleSaveKey(provider)}
                   disabled={isSaving}
-                  className="w-full h-9 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-semibold gap-1.5 shadow-md shadow-[#7C3AED]/20"
+                  className="w-full h-9 bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white text-xs font-semibold gap-1.5 shadow-md shadow-[#7C3AED]/20 focus:ring-2 focus:ring-[#7C3AED]"
                 >
                   {isSaving ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -346,6 +376,17 @@ export default function ApiKeysSettingsPage() {
           );
         })}
       </div>
+
+      {/* Destructive Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={!!deleteTargetId}
+        title="Are you sure?"
+        description="This action cannot be undone. The API key credentials will be deleted from your organization vault."
+        confirmText="Delete API Key"
+        isLoading={isDeleting}
+        onConfirm={handleDeleteApiKey}
+        onCancel={() => setDeleteTargetId(null)}
+      />
     </div>
   );
 }

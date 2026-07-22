@@ -202,12 +202,37 @@ async def start_pipeline(
         except Exception as exc:
             logger.warning("LiveKit room pre-creation skipped (may already exist): %s", exc)
 
-    # ---- Update call status to 'in_progress' ----
-    if supabase:
-        try:
-            supabase.table("calls").update({"status": "in_progress"}).eq("id", call_id).execute()
-        except Exception as exc:
-            logger.warning("Failed to update call status to in_progress: %s", exc)
+    # ---- Update call status to 'in_progress' & inject P2-M5 memory ----
+    from app.services.memory import retriever
+    try:
+        mem_dict = await retriever.retrieve_all_memory(
+            contact_id=contact_id,
+            org_id=org_id,
+            agent_id=agent_id,
+            config={"call_id": call_id},
+        )
+        memory_block = retriever.build_memory_prompt(mem_dict)
+        if memory_block:
+            final_prompt = f"{final_prompt}\n\n{memory_block}"
+
+        if supabase:
+            try:
+                c_res = supabase.table("calls").select("analysis").eq("id", call_id).single().execute()
+                c_analysis = (c_res.data or {}).get("analysis") or {}
+                if isinstance(c_analysis, dict):
+                    c_analysis["memory_recalled"] = mem_dict
+                else:
+                    c_analysis = {"memory_recalled": mem_dict}
+                supabase.table("calls").update({
+                    "status": "in_progress",
+                    "analysis": c_analysis
+                }).eq("id", call_id).execute()
+            except Exception as exc:
+                logger.warning("Failed to update call status or memory_recalled: %s", exc)
+        else:
+            logger.info("Supabase client not initialized — skipping call status update")
+    except Exception as exc:
+        logger.warning("Memory retrieval at pipeline start failed: %s", exc)
 
     # ---- Pipecat pipeline assembly ----
     # Pipecat is imported inside the function to allow the module to load

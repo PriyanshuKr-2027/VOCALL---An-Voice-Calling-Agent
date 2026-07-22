@@ -44,6 +44,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import GraphMemoryViewer from '@/components/memory/GraphMemoryViewer';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useRouter } from 'next/navigation';
 
 // Prompt templates
 const USE_CASE_TEMPLATES: Record<string, string> = {
@@ -350,8 +352,25 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
   const [frustrationThreshold, setFrustrationThreshold] = useState(0.7);
   const [onFrustrationConnector, setOnFrustrationConnector] = useState('');
 
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [deleteAgentModalOpen, setDeleteAgentModalOpen] = useState(false);
+  const [isDeletingAgent, setIsDeletingAgent] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+
+  const handleDeleteAgent = async () => {
+    setIsDeletingAgent(true);
+    try {
+      await (supabase.from('agents') as any).delete().eq('id', params.id);
+      showNotification('Agent deleted successfully');
+      router.push('/dashboard/agents');
+    } catch (err: any) {
+      showNotification(`Error: /api/agents/${params.id} — ${err?.message || 'Failed to delete agent'}. Try again.`);
+    } finally {
+      setIsDeletingAgent(false);
+      setDeleteAgentModalOpen(false);
+    }
+  };
 
   // Fetch Agent data & scoped calls
   useEffect(() => {
@@ -579,9 +598,18 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
           </Button>
 
           <Button
+            onClick={() => setDeleteAgentModalOpen(true)}
+            variant="outline"
+            size="sm"
+            className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+
+          <Button
             onClick={handlePublish}
             disabled={saving}
-            className="gap-1.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-semibold shadow-lg shadow-[#7C3AED]/30"
+            className="gap-1.5 bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white font-semibold shadow-lg shadow-[#7C3AED]/30 focus:ring-2 focus:ring-[#7C3AED]"
           >
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -839,6 +867,201 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
         </div>
       )}
 
+      {/* 9. ANALYSIS TAB */}
+      {activeTab === 'analysis' && (
+        <div className="space-y-6">
+          {/* Header */}
+          <Card className="border-slate-800 bg-slate-900/60 p-6 space-y-2">
+            <div className="flex items-center gap-2">
+              <BarChart className="w-5 h-5 text-[#A78BFA]" />
+              <h3 className="text-lg font-semibold text-white">Post-Call Analysis</h3>
+            </div>
+            <p className="text-xs text-slate-400">
+              Configure how VoCall analyzes completed calls — summaries, structured data extraction,
+              and success evaluation are all generated automatically after each call.
+            </p>
+          </Card>
+
+          {/* emotion_state Auto-Injection Notice */}
+          <Card className="border-emerald-500/30 bg-emerald-500/5 p-5">
+            <div className="flex items-start gap-3">
+              <div className="w-2 h-2 mt-1.5 rounded-full bg-emerald-400 shrink-0 shadow-sm shadow-emerald-400/50" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-emerald-300">emotion_state — Live</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  <code className="text-emerald-400 font-mono">emotion_state</code> is automatically
+                  included in every structured data output. You do not need to define it as a property.
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Call Summary */}
+          <Card className="border-slate-800 bg-slate-900/60 p-6 space-y-4">
+            <h4 className="font-semibold text-white text-sm flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[#A78BFA]" />
+              Call Summary
+            </h4>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-300">Summary Prompt</label>
+              <textarea
+                value={summaryPrompt}
+                onChange={(e) => setSummaryPrompt(e.target.value)}
+                rows={3}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-200 resize-none focus:outline-none focus:border-[#7C3AED] placeholder-slate-600"
+              />
+              <p className="text-[11px] text-slate-500">
+                Instruction sent to the LLM to summarize each completed call into 2–4 sentences.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-300">Min. Messages to Trigger</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={minMessagesTrigger}
+                  onChange={(e) => setMinMessagesTrigger(Number(e.target.value))}
+                  className="w-24 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#7C3AED]"
+                />
+                <span className="text-xs text-slate-500">turns before analysis runs</span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Success Evaluation */}
+          <Card className="border-slate-800 bg-slate-900/60 p-6 space-y-4">
+            <h4 className="font-semibold text-white text-sm flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-[#A78BFA]" />
+              Success Evaluation
+            </h4>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-300">Evaluation Prompt</label>
+              <textarea
+                value={successEvalPrompt}
+                onChange={(e) => setSuccessEvalPrompt(e.target.value)}
+                rows={2}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-200 resize-none focus:outline-none focus:border-[#7C3AED]"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-300">Success Rubric</label>
+              <input
+                type="text"
+                value={successRubric}
+                onChange={(e) => setSuccessRubric(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#7C3AED]"
+                placeholder="e.g. Goal Achieved"
+              />
+            </div>
+          </Card>
+
+          {/* Structured Data Schema */}
+          <Card className="border-slate-800 bg-slate-900/60 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-white text-sm flex items-center gap-2">
+                <Database className="w-4 h-4 text-[#A78BFA]" />
+                Structured Data Schema
+              </h4>
+              <button
+                onClick={() =>
+                  setSchemaProperties((prev) => [
+                    ...prev,
+                    { id: `p${Date.now()}`, name: '', prompt: '' },
+                  ])
+                }
+                className="text-xs font-semibold text-[#A78BFA] hover:text-white border border-[#7C3AED]/40 hover:border-[#7C3AED] px-3 py-1.5 rounded-lg transition-all"
+              >
+                + Add Property
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-300">Extraction Prompt</label>
+              <textarea
+                value={structuredDataPrompt}
+                onChange={(e) => setStructuredDataPrompt(e.target.value)}
+                rows={2}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-200 resize-none focus:outline-none focus:border-[#7C3AED]"
+              />
+            </div>
+
+            {/* Auto-injected emotion_state row */}
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-emerald-300 font-semibold">emotion_state</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold">
+                  Auto-Injected
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-500 italic">Always present — valence, arousal, dominant, confidence</span>
+            </div>
+
+            {/* User-defined properties */}
+            <div className="space-y-3">
+              {schemaProperties.map((prop, idx) => (
+                <div key={prop.id} className="grid grid-cols-[1fr_2fr_auto] gap-2 items-start">
+                  <input
+                    type="text"
+                    value={prop.name}
+                    onChange={(e) => {
+                      const updated = [...schemaProperties];
+                      updated[idx] = { ...updated[idx], name: e.target.value };
+                      setSchemaProperties(updated);
+                    }}
+                    placeholder="property_name"
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#7C3AED]"
+                  />
+                  <input
+                    type="text"
+                    value={prop.prompt}
+                    onChange={(e) => {
+                      const updated = [...schemaProperties];
+                      updated[idx] = { ...updated[idx], prompt: e.target.value };
+                      setSchemaProperties(updated);
+                    }}
+                    placeholder="Extraction instruction for this field"
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-[#7C3AED]"
+                  />
+                  <button
+                    onClick={() => setSchemaProperties((prev) => prev.filter((_, i) => i !== idx))}
+                    className="text-slate-600 hover:text-red-400 p-2 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {schemaProperties.length === 0 && (
+              <p className="text-xs text-slate-600 italic text-center py-2">
+                No custom properties defined. Add properties above to extract structured data from calls.
+              </p>
+            )}
+          </Card>
+
+          {/* Analysis Timeout */}
+          <Card className="border-slate-800 bg-slate-900/60 p-6 space-y-3">
+            <h4 className="font-semibold text-white text-sm flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#A78BFA]" />
+              Analysis Timeout
+            </h4>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={5}
+                max={120}
+                value={analysisTimeout}
+                onChange={(e) => setAnalysisTimeout(Number(e.target.value))}
+                className="w-24 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#7C3AED]"
+              />
+              <span className="text-xs text-slate-500">seconds before analysis is skipped</span>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* 10. RECENT CALLS TAB */}
       {activeTab === 'recent-calls' && (
         <Card className="border-slate-800 bg-slate-900/60">
@@ -960,6 +1183,17 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
           </CardContent>
         </Card>
       )}
+
+      {/* Destructive Delete Agent Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={deleteAgentModalOpen}
+        title="Are you sure?"
+        description="This action cannot be undone. This voice agent, its persona, and system prompt configurations will be deleted permanently."
+        confirmText="Delete Agent"
+        isLoading={isDeletingAgent}
+        onConfirm={handleDeleteAgent}
+        onCancel={() => setDeleteAgentModalOpen(false)}
+      />
     </div>
   );
 }

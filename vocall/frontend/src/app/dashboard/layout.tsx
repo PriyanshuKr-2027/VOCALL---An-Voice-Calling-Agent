@@ -316,11 +316,11 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="flex h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden select-none">
+    <div className="flex flex-col md:flex-row h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden select-none">
       {/* ==================================================================== */}
-      {/* 1. LEFT SIDEBAR (60px, ICON ONLY, TOOLTIPS ON HOVER)                  */}
+      {/* 1. LEFT SIDEBAR (60px, DESKTOP ONLY)                                  */}
       {/* ==================================================================== */}
-      <aside className="w-[60px] flex-shrink-0 bg-slate-950 border-r border-slate-800/80 flex flex-col items-center justify-between py-4 z-20">
+      <aside className="hidden md:flex w-[60px] flex-shrink-0 bg-slate-950 border-r border-slate-800/80 flex-col items-center justify-between py-4 z-20">
         <div className="flex flex-col items-center gap-6 w-full">
           {/* App Logo Icon */}
           <Link href="/dashboard" className="group relative flex items-center justify-center">
@@ -403,9 +403,9 @@ export default function DashboardLayout({
       </aside>
 
       {/* ==================================================================== */}
-      {/* 2. SECOND PANEL (240px, SPACE SWITCHER + SEARCH + CONTEXT LIST)       */}
+      {/* 2. SECOND PANEL (240px, DESKTOP ONLY)                                */}
       {/* ==================================================================== */}
-      <div className="w-[240px] flex-shrink-0 bg-slate-900/60 border-r border-slate-800/80 flex flex-col py-4 px-3 gap-4 z-10">
+      <div className="hidden lg:flex w-[240px] flex-shrink-0 bg-slate-900/60 border-r border-slate-800/80 flex-col py-4 px-3 gap-4 z-10">
         {/* Space Switcher Dropdown */}
         <div className="relative">
           <button
@@ -472,7 +472,7 @@ export default function DashboardLayout({
             else if (pathname.startsWith('/dashboard/contacts')) router.push('/dashboard/contacts');
             else if (pathname.startsWith('/dashboard/spaces')) router.push('/dashboard/spaces');
           }}
-          className="w-full h-9 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-semibold shadow-md shadow-[#7C3AED]/20 flex items-center justify-center gap-1.5"
+          className="w-full h-9 bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white text-xs font-semibold shadow-md shadow-[#7C3AED]/20 flex items-center justify-center gap-1.5"
         >
           <Plus className="w-4 h-4" />
           <span>{getNewButtonText()}</span>
@@ -487,9 +487,43 @@ export default function DashboardLayout({
       {/* ==================================================================== */}
       {/* 3. MAIN PANEL (FILLS REMAINING WIDTH)                                 */}
       {/* ==================================================================== */}
-      <main className="flex-1 overflow-y-auto bg-slate-950 p-8">
+      <main className="flex-1 overflow-y-auto bg-slate-950 p-4 md:p-8 pb-20 md:pb-8">
         {children}
       </main>
+
+      {/* ==================================================================== */}
+      {/* 4. MOBILE BOTTOM NAVIGATION BAR (<768px)                              */}
+      {/* ==================================================================== */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950/95 border-t border-slate-800/80 backdrop-blur-md z-50 flex items-center justify-around py-2 px-3">
+        {[
+          { name: 'Home', href: '/dashboard', icon: LayoutDashboard },
+          { name: 'Agents', href: '/dashboard/agents', icon: Bot },
+          { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
+          { name: 'Calls', href: '/dashboard/calls', icon: PhoneCall },
+          { name: 'Settings', href: '/dashboard/settings/telephony', icon: Settings },
+        ].map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.href);
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-all ${
+                active ? 'text-[#A78BFA]' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div
+                className={`p-1.5 rounded-xl ${
+                  active ? 'bg-[#7C3AED]/20 border border-[#7C3AED]/40' : ''
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+              </div>
+              <span>{item.name}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

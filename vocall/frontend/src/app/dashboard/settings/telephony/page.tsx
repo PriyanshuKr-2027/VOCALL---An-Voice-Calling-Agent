@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface PhoneNumberRecord {
   id: string;
@@ -75,6 +76,10 @@ export default function TelephonySettingsPage() {
   const [newProvider, setNewProvider] = useState('Twilio');
   const [newAgentId, setNewAgentId] = useState('');
   const [adding, setAdding] = useState(false);
+
+  // Delete Confirm Dialog State
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // KYC Modal / Form State
   const [selectedPhoneForKyc, setSelectedPhoneForKyc] = useState<PhoneNumberRecord | null>(null);
@@ -156,6 +161,26 @@ export default function TelephonySettingsPage() {
       setShowAddModal(false);
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleDeletePhoneNumber = async () => {
+    if (!deleteTargetId) return;
+
+    setIsDeleting(true);
+    try {
+      await fetch(`/api/phone-numbers/${deleteTargetId}`, {
+        method: 'DELETE',
+      });
+      await (supabase.from('phone_numbers') as any).delete().eq('id', deleteTargetId);
+
+      setPhoneNumbers((prev) => prev.filter((p) => p.id !== deleteTargetId));
+      showNotification('Phone number deleted successfully');
+    } catch (err: any) {
+      showNotification(`Error: /api/phone-numbers/${deleteTargetId} — ${err?.message || 'Failed to delete'}. Try again.`);
+    } finally {
+      setIsDeleting(false);
+      setDeleteTargetId(null);
     }
   };
 
@@ -322,7 +347,7 @@ export default function TelephonySettingsPage() {
 
           <Button
             onClick={() => setShowAddModal(true)}
-            className="bg-[#7C3AED] hover:bg-[#6D28D9] text-white gap-1.5 shadow-md shadow-[#7C3AED]/20"
+            className="bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white gap-1.5 shadow-md shadow-[#7C3AED]/20 focus:ring-2 focus:ring-[#7C3AED]"
           >
             <Plus className="w-4 h-4" />
             <span>+ Add Number</span>
@@ -376,6 +401,14 @@ export default function TelephonySettingsPage() {
                         <FileText className="w-3.5 h-3.5 mr-1" />
                         Upload KYC
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeleteTargetId(phone.id)}
+                        className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300 h-8 px-2.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -385,9 +418,7 @@ export default function TelephonySettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ==================================================================== */}
-      {/* MODAL 1: ADD PHONE NUMBER                                            */}
-      {/* ==================================================================== */}
+      {/* Add Number Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <Card className="w-full max-w-md border-slate-800 bg-slate-900 shadow-2xl">
@@ -407,7 +438,7 @@ export default function TelephonySettingsPage() {
                     value={newNumber}
                     onChange={(e) => setNewNumber(e.target.value)}
                     required
-                    className="bg-slate-950 border-slate-800 font-mono"
+                    className="bg-slate-950 border-slate-800 font-mono focus:ring-2 focus:ring-[#7C3AED]"
                   />
                 </div>
 
@@ -451,7 +482,7 @@ export default function TelephonySettingsPage() {
                 <Button
                   type="submit"
                   disabled={adding}
-                  className="bg-[#7C3AED] hover:bg-[#6D28D9] text-white"
+                  className="bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white font-semibold gap-1.5 focus:ring-2 focus:ring-[#7C3AED]"
                 >
                   {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Provision Number'}
                 </Button>
@@ -461,9 +492,7 @@ export default function TelephonySettingsPage() {
         </div>
       )}
 
-      {/* ==================================================================== */}
-      {/* MODAL 2: KYC DOCUMENT UPLOAD                                          */}
-      {/* ==================================================================== */}
+      {/* KYC Upload Modal */}
       {selectedPhoneForKyc && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <Card className="w-full max-w-lg border-slate-800 bg-slate-900 shadow-2xl">
@@ -546,7 +575,7 @@ export default function TelephonySettingsPage() {
                 <Button
                   type="submit"
                   disabled={uploadingKyc || !selectedFile}
-                  className="bg-[#7C3AED] hover:bg-[#6D28D9] text-white"
+                  className="bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white font-semibold gap-1.5 focus:ring-2 focus:ring-[#7C3AED]"
                 >
                   {uploadingKyc ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Submit KYC Document'}
                 </Button>
@@ -555,6 +584,17 @@ export default function TelephonySettingsPage() {
           </Card>
         </div>
       )}
+
+      {/* Destructive Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={!!deleteTargetId}
+        title="Are you sure?"
+        description="This action cannot be undone. The carrier phone number will be deleted permanently from your account."
+        confirmText="Delete Phone Number"
+        isLoading={isDeleting}
+        onConfirm={handleDeletePhoneNumber}
+        onCancel={() => setDeleteTargetId(null)}
+      />
     </div>
   );
 }

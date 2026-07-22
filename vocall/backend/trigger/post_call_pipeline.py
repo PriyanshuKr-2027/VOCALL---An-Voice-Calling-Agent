@@ -174,17 +174,27 @@ async def run_analysis(
     transcript: Any,
     emotion_events: List[Any],
     analysis_config: Dict[str, Any],
+    avg_emotion_state: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Generates post-call analysis summary, sentiment, action items, and resolution status."""
+    """
+    Generates post-call analysis summary, sentiment, action items, and resolution status.
+
+    Always merges avg_emotion_state as a top-level key in the returned structured_data
+    dict — resolving the P1-M9 comment:
+      '// PHASE 3: auto-inject emotion_state into structured_data output'
+    """
     transcript_text = format_transcript(transcript)
     if not transcript_text.strip():
-        return {
+        structured_data: Dict[str, Any] = {
             "summary": "Empty or silent call.",
             "sentiment": "Neutral",
             "action_items": [],
             "user_intent": "Unknown",
             "resolution_status": "unresolved",
         }
+        # P3-M1: auto-inject emotion_state
+        structured_data["emotion_state"] = avg_emotion_state or {}
+        return structured_data
 
     prompt = (
         "Perform post-call analysis on this transcript. Return ONLY valid JSON matching this schema:\n"
@@ -210,7 +220,7 @@ async def run_analysis(
             cleaned = cleaned.removeprefix("```").removesuffix("```").strip()
 
         parsed = json.loads(cleaned)
-        return {
+        structured_data = {
             "summary": parsed.get("summary", "Call completed."),
             "sentiment": parsed.get("sentiment", "Neutral"),
             "action_items": parsed.get("action_items", []),
@@ -219,13 +229,17 @@ async def run_analysis(
         }
     except Exception as exc:
         logger.error("Failed run_analysis: %s", exc)
-        return {
+        structured_data = {
             "summary": "Call completed.",
             "sentiment": "Neutral",
             "action_items": [],
             "user_intent": "General inquiry",
             "resolution_status": "resolved",
         }
+
+    # P3-M1: always merge avg_emotion_state as a top-level key — live as of P3-M1
+    structured_data["emotion_state"] = avg_emotion_state or {}
+    return structured_data
 
 
 async def get_post_call_connectors(agent_id: str) -> List[Dict[str, Any]]:
@@ -324,12 +338,12 @@ async def post_call_pipeline(
             graph.link_episodes(contact_id, prev_ep_id, episode.id)
     logger.info("Step 6 — FalkorDB graph updated successfully")
 
-    # Step 7 — Run analysis
+    # Step 7 — Run analysis (emotion_state auto-injected as of P3-M1)
     agent = await get_agent(agent_id)
     agent_config = agent.get("config", {}) if isinstance(agent, dict) else {}
     analysis_config = agent_config.get("analysis", {})
-    analysis = await run_analysis(transcript, emotion_events, analysis_config)
-    logger.info("Step 7 — Post-call analysis complete (summary length=%d)", len(analysis.get("summary", "")))
+    analysis = await run_analysis(transcript, emotion_events, analysis_config, avg_emotion_state=avg_emotion)
+    logger.info("Step 7 — Post-call analysis complete (summary length=%d, emotion_state=%s)", len(analysis.get("summary", "")), analysis.get("emotion_state"))
 
     # Step 8 — Fire post-call connectors (Trigger.dev retries automatically)
     connectors = await get_post_call_connectors(agent_id)
@@ -357,6 +371,11 @@ async def post_call_pipeline(
     # Step 10 — Update calls row in Supabase
     if supabase:
         try:
+            if isinstance(analysis, dict):
+                analysis["graph_context"] = {
+                    "entities": entities,
+                    "frustration_topics": frustration_topics,
+                }
             update_payload = {
                 "emotion_score": avg_emotion.get("valence", 0.0),
                 "analysis": analysis,

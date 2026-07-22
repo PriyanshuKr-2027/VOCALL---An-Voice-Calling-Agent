@@ -26,7 +26,8 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState('VoCall Admin');
   const [loading, setLoading] = useState(true);
 
-  // Stats state
+  const [avgEmotionNum, setAvgEmotionNum] = useState<number | null>(null);
+
   const [stats, setStats] = useState({
     totalCalls: 128,
     avgDuration: '2m 14s',
@@ -40,23 +41,55 @@ export default function DashboardPage() {
     async function loadDashboardData() {
       setLoading(true);
       try {
+        let userOrgId: string | null = null;
         const { data: authData } = await supabase.auth.getUser();
         if (authData?.user) {
           const { data: profile } = await (supabase.from('profiles') as any)
-            .select('name')
+            .select('name, org_id')
             .eq('id', authData.user.id)
             .single();
 
           const profileData = profile as any;
           if (profileData?.name) setUserName(profileData.name);
           else if (authData.user.email) setUserName(authData.user.email.split('@')[0]);
+
+          if (profileData?.org_id) {
+            userOrgId = profileData.org_id;
+          }
         }
 
-        const { data: calls } = await (supabase.from('calls') as any).select('id, status, duration_seconds');
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        let callsQuery = (supabase.from('calls') as any)
+          .select('id, status, duration_seconds, emotion_score, created_at, org_id');
+
+        if (userOrgId) {
+          callsQuery = callsQuery.eq('org_id', userOrgId);
+        }
+
+        const { data: calls } = await callsQuery;
         const { data: agents } = await (supabase.from('agents') as any).select('id, published');
 
-        const callsList = calls as any[];
-        const agentsList = agents as any[];
+        const callsList = (calls as any[]) || [];
+
+        // Filter calls for last 30 days with valid emotion scores
+        const recentEmotionCalls = callsList.filter((c) => {
+          if (c.emotion_score === null || c.emotion_score === undefined) return false;
+          if (c.created_at && new Date(c.created_at) < thirtyDaysAgo) return false;
+          return true;
+        });
+
+        let avgEmotionStr = '—';
+        let emotionVal: number | null = null;
+
+        if (recentEmotionCalls.length > 0) {
+          const sum = recentEmotionCalls.reduce((acc, c) => acc + Number(c.emotion_score), 0);
+          emotionVal = sum / recentEmotionCalls.length;
+          avgEmotionStr = (emotionVal > 0 ? '+' : '') + emotionVal.toFixed(2);
+        }
+
+        setAvgEmotionNum(emotionVal);
 
         if (callsList && callsList.length > 0) {
           const total = callsList.length;
@@ -72,7 +105,7 @@ export default function DashboardPage() {
             avgDuration: `${m}m ${s}s`,
             successfulCalls: successful,
             failedCalls: failed,
-            avgEmotionScore: '—',
+            avgEmotionScore: avgEmotionStr,
             activeAgents: agents ? agents.length : 4,
           });
         }
@@ -225,14 +258,29 @@ export default function DashboardPage() {
             </Card>
 
             {/* Row 2, Card 2: Avg Emotion Score */}
-            <Card className="border-slate-800 bg-slate-900/60">
+            <Card className="border-slate-800 bg-slate-900/60 relative group">
               <CardContent className="p-6 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-400">Avg Emotion Score</span>
                   <Smile className="w-4 h-4 text-purple-400" />
                 </div>
-                <div className="text-3xl font-extrabold text-slate-500 font-mono">{stats.avgEmotionScore}</div>
-                <p className="text-[11px] text-slate-500">Wired in Phase 3 (P3-M3)</p>
+                <div
+                  className={`text-3xl font-extrabold font-mono ${
+                    avgEmotionNum !== null
+                      ? avgEmotionNum > 0.3
+                        ? 'text-emerald-400'
+                        : avgEmotionNum >= -0.3
+                        ? 'text-amber-400'
+                        : 'text-red-400'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  {stats.avgEmotionScore}
+                </div>
+                <p className="text-[11px] text-slate-500">Average caller emotion over last 30 days.</p>
+                <div className="absolute right-3 top-3 hidden group-hover:block bg-slate-950 text-slate-200 text-[11px] px-2.5 py-1 rounded shadow-xl border border-slate-800 pointer-events-none z-20 whitespace-nowrap">
+                  Average caller emotion over last 30 days.
+                </div>
               </CardContent>
             </Card>
 

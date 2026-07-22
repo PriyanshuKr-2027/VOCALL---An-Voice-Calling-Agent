@@ -66,3 +66,22 @@ async def delete_contact_graph_memory(contact_id: UUID):
         raise HTTPException(status_code=500, detail="Failed to delete graph memory")
     return {"status": "success", "message": f"Graph memory cleared for contact {contact_id}"}
 
+
+@router.delete("/{contact_id}/memory/long-term")
+async def delete_contact_long_term_memory(contact_id: UUID):
+    """Clear all long-term memory records for a given contact."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database client unavailable")
+    supabase.table("memory_long_term").delete().eq("contact_id", str(contact_id)).execute()
+    return {"status": "success", "message": f"Long-term memory cleared for contact {contact_id}"}
+
+
+@router.delete("/{contact_id}/memory/episodic")
+async def delete_contact_episodic_memory(contact_id: UUID):
+    """Clear all episodic memory records for a given contact."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database client unavailable")
+    supabase.table("memory_episodic").delete().eq("contact_id", str(contact_id)).execute()
+    return {"status": "success", "message": f"Episodic memory cleared for contact {contact_id}"}
+
+
