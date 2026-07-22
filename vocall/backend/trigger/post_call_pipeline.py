@@ -11,11 +11,12 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
-from app.services.supabase_client import supabase
-from app.services.llm import llm_service
-from app.services.memory import short_term, episodic, long_term, graph
-from app.services.connectors import dispatcher
 from app.services import email
+from app.services.connectors import dispatcher
+from app.services.llm import llm_service
+from app.services.memory import episodic, graph, long_term, short_term
+from app.services.post_call import fire_post_call_connectors
+from app.services.supabase_client import supabase
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,6 @@ def task(id: str, maxDuration: int = 300, retry: Optional[Dict[str, Any]] = None
 
 
 def trigger(task_obj: Any, payload: Dict[str, Any]):
-    """
-    Fires a Trigger.dev task. Accepts either (task_fn, payload_dict) or (payload_dict,)
-    if called directly on task_obj.trigger(payload).
-    """
     if hasattr(task_obj, "trigger"):
         return asyncio.create_task(task_obj.trigger(payload))
     elif callable(task_obj):
@@ -140,7 +137,7 @@ async def extract_entities_and_topics(transcript: Any) -> tuple[List[str], List[
             prompt="You are an expert AI data extraction system.",
             messages=[{"role": "user", "content": prompt}],
         )
-        cleaned = raw_response.strip()
+        cleaned = str(raw_response).strip()
         if cleaned.startswith("```json"):
             cleaned = cleaned.removeprefix("```json").removesuffix("```").strip()
         elif cleaned.startswith("```"):
@@ -167,6 +164,17 @@ async def get_agent(agent_id: str) -> Dict[str, Any]:
         return res.data or {}
     except Exception as exc:
         logger.error("Failed to get agent config for %s: %s", agent_id, exc)
+        return {}
+
+
+async def get_contact(contact_id: Optional[str]) -> Dict[str, Any]:
+    """Fetches contact details from Supabase if contact_id provided."""
+    if not supabase or not contact_id:
+        return {}
+    try:
+        res = supabase.table("contacts").select("*").eq("id", contact_id).single().execute()
+        return res.data or {}
+    except Exception:
         return {}
 
 
@@ -213,7 +221,7 @@ async def run_analysis(
             prompt="You are a senior voice operations analyst.",
             messages=[{"role": "user", "content": prompt}],
         )
-        cleaned = raw_response.strip()
+        cleaned = str(raw_response).strip()
         if cleaned.startswith("```json"):
             cleaned = cleaned.removeprefix("```json").removesuffix("```").strip()
         elif cleaned.startswith("```"):
@@ -240,24 +248,6 @@ async def run_analysis(
     # P3-M1: always merge avg_emotion_state as a top-level key — live as of P3-M1
     structured_data["emotion_state"] = avg_emotion_state or {}
     return structured_data
-
-
-async def get_post_call_connectors(agent_id: str) -> List[Dict[str, Any]]:
-    """Fetches all active connectors configured for an agent."""
-    if not supabase or not agent_id:
-        return []
-    try:
-        res = (
-            supabase.table("connectors")
-            .select("*")
-            .eq("agent_id", agent_id)
-            .eq("enabled", True)
-            .execute()
-        )
-        return res.data or []
-    except Exception as exc:
-        logger.error("Failed to fetch post-call connectors for agent %s: %s", agent_id, exc)
-        return []
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +304,7 @@ async def post_call_pipeline(
                 )
     logger.info("Step 4 — Stored long-term facts (avg_emotion=%s)", avg_emotion)
 
-    # Step 5 — Episodic row already written in Step 2 (log confirmation)
+    # Step 5 — Episodic row confirmed
     logger.info("Step 5 — Episodic row confirmed written in Step 2 (episode_id=%s)", episode.id)
 
     # Step 6 — Update FalkorDB graph
@@ -340,29 +330,37 @@ async def post_call_pipeline(
 
     # Step 7 — Run analysis (emotion_state auto-injected as of P3-M1)
     agent = await get_agent(agent_id)
+    contact = await get_contact(contact_id)
     agent_config = agent.get("config", {}) if isinstance(agent, dict) else {}
     analysis_config = agent_config.get("analysis", {})
     analysis = await run_analysis(transcript, emotion_events, analysis_config, avg_emotion_state=avg_emotion)
     logger.info("Step 7 — Post-call analysis complete (summary length=%d, emotion_state=%s)", len(analysis.get("summary", "")), analysis.get("emotion_state"))
 
-    # Step 8 — Fire post-call connectors (Trigger.dev retries automatically)
-    connectors = await get_post_call_connectors(agent_id)
-    for connector in connectors:
-        ctype = connector.get("type") or connector.get("connector_type") or "webhook"
-        cconfig = connector.get("config", {})
-        try:
-            await dispatcher.fire_connector(
-                connector_type=ctype,
-                config=cconfig,
-                payload={
-                    "call_id": call_id,
-                    "summary": analysis.get("summary", ""),
-                    "emotion_score": avg_emotion.get("valence", 0.0),
-                },
-            )
-        except Exception as exc:
-            logger.error("Error firing connector %s: %s", ctype, exc)
-    logger.info("Step 8 — Post-call connectors dispatched (%d connectors)", len(connectors))
+    # Step 8 — Fire post-call connectors in parallel
+    contact_phone = contact.get("phone") or contact.get("number") or "+1234567890"
+    contact_name = contact.get("name") or "Customer"
+    agent_name = agent.get("name") or "AI Agent"
+    duration_seconds = len(transcript) * 10  # approximate if not specified
+
+    call_data = {
+        "call_id": call_id,
+        "contact_phone": contact_phone,
+        "contact_name": contact_name,
+        "agent_name": agent_name,
+        "call_summary": analysis.get("summary", ""),
+        "emotion_score": avg_emotion.get("valence", 0.0),
+        "duration_seconds": duration_seconds,
+        "transcript": transcript,
+        "structured_data": analysis,
+        "success_eval": analysis.get("resolution_status", "completed"),
+    }
+
+    connector_results = await fire_post_call_connectors(
+        org_id=org_id or agent.get("org_id", ""),
+        agent_id=agent_id,
+        call_data=call_data,
+    )
+    logger.info("Step 8 — Post-call connectors executed (%d results)", len(connector_results))
 
     # Step 9 — Send email
     await email.send_post_call_email(agent, call_id, analysis)
@@ -397,4 +395,5 @@ async def post_call_pipeline(
         "episode_id": episode.id,
         "emotion_score": avg_emotion.get("valence", 0.0),
         "analysis": analysis,
+        "connector_results": connector_results,
     }

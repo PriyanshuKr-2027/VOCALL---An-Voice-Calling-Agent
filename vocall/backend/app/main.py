@@ -22,7 +22,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
 )
 
-# CORS middleware for Next.js frontend (http://localhost:3000)
+# CORS middleware for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],
@@ -38,7 +38,7 @@ app.include_router(auth.router, prefix=api_v1_prefix)
 app.include_router(agents.router, prefix=api_v1_prefix)
 app.include_router(calls.router, prefix=api_v1_prefix)
 app.include_router(contacts.router, prefix=api_v1_prefix)
-app.include_router(connectors.router, prefix=api_v1_prefix)
+app.include_router(connectors.router)  # Handles /api/connectors directly
 app.include_router(phone_numbers.router, prefix=api_v1_prefix)
 app.include_router(api_keys.router, prefix=api_v1_prefix)
 app.include_router(webhooks.router, prefix=api_v1_prefix)
@@ -51,10 +51,10 @@ def root():
     return {
         "status": "healthy",
         "service": settings.PROJECT_NAME,
-        "version": "1.0.0",
+        "version": settings.VERSION,
     }
 
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": settings.VERSION}
