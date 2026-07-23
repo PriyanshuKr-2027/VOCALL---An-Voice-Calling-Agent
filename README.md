@@ -42,7 +42,8 @@ VoCall is an enterprise-grade, open-source voice agent platform designed for bui
 - **Audio Emotion Signal:** Real-time paralinguistic tone analysis directly from caller audio via **Hume AI EVI**.
 - **Emotion Fusion:** Combines audio and text cues to compute a unified valence/arousal state, triggering dynamic system prompt changes (e.g., empathetic tone shift when valence drops) and auto-routing/escalation rules.
 
-### 📞 Telephony Integrations
+### 📞 Telephony & Web Voice Integrations
+- **Web Browser Calling:** Instant in-browser WebRTC voice agent testing via **LiveKit WebCall pipeline** and interactive modal (`WebCallModal`).
 - **Twilio:** Used for rapid development, testing, and streaming raw telephony audio via WebSockets.
 - **Exotel / Plivo:** Bring Your Own Key (BYOK) integrations for low-cost, TRAI-compliant telephony in India.
 
@@ -56,13 +57,13 @@ VoCall is an enterprise-grade, open-source voice agent platform designed for bui
 
 The repository is organized into three major components:
 1. **Landing Page:** A lightweight, high-performance showcase website built with React, Vite, and Tailwind CSS v4.
-2. **Dashboard Web App:** A Next.js 14 application providing full organization settings, agent configuration tabs, contact details, memory visualizations (FalkorDB graphs), call history, and Recharts-based analytics consoles.
-3. **Backend API:** A Python FastAPI service handling WebSocket connections from LiveKit/Twilio, LLM completions, memory lookups, and webhook routing.
+2. **Dashboard Web App:** A Next.js 14 application providing full organization settings, agent configuration tabs, contact details, memory visualizations (FalkorDB graphs), in-browser Web Voice Call testing, call history, and Recharts-based analytics consoles.
+3. **Backend API:** A Python FastAPI service handling WebSocket and WebRTC connections from LiveKit/Twilio, LLM completions, memory lookups, and webhook routing.
 
 ```mermaid
 graph TD
-    User([Caller Phone]) <--> Twilio[Twilio/Exotel Telephony]
-    Twilio <-->|WebSocket Stream| LiveKit[LiveKit Media Room]
+    User([Caller Phone / Web Browser]) <--> Twilio[Twilio / LiveKit WebCall]
+    Twilio <-->|WebSocket Stream / WebRTC| LiveKit[LiveKit Media Room]
     LiveKit <-->|WebRTC| FastAPI[FastAPI Backend]
     FastAPI <-->|Redis STM| Upstash[Upstash Redis]
     FastAPI <-->|Embeddings pgvector| Supabase[Supabase Database]
@@ -84,15 +85,17 @@ graph TD
 │   ├── core/                 # Configuration & settings management
 │   ├── models/               # SQLAlchemy / SQLModel schemas
 │   ├── routers/              # API Route controllers (agents, calls, memory, etc.)
-│   ├── services/             # STT, TTS, LLM, Redis, and FalkorDB clients
+│   ├── services/             # STT, TTS, LLM, Redis, FalkorDB, & WebCall pipeline
 │   └── main.py               # Backend application entry point
 ├── components/               # Frontend component sharing & TypeScript templates
 ├── Documentation/            # Detailed PRD, Architecture, Features, and Design docs
 ├── src/                      # Landing Page Frontend (Vite + React + Tailwind v4)
 ├── supabase/                 # Supabase configuration & migrations
+├── tests/                    # Pytest backend test suite
 ├── trigger/                  # Trigger.dev background jobs
 ├── vocall/                   # Alternative monorepo configuration (Next.js frontend + FastAPI backend)
-│   ├── frontend/             # Next.js 14 App Router, TypeScript, shadcn/ui Dashboard
+│   ├── docs/                 # UI requirement and changes documentation
+│   ├── frontend/             # Next.js 14 App Router, TypeScript, shadcn/ui Dashboard & WebCallModal
 │   └── backend/              # Alternative FastAPI layout
 ├── docker-compose.yml        # Multi-container local deployment orchestration
 ├── package.json              # Landing page frontend package manifest
@@ -144,6 +147,11 @@ If you are developing locally or using Supabase Cloud:
    ```
    API Documentation is available locally at [http://localhost:8000/docs](http://localhost:8000/docs).
 
+5. (Optional) Run tests:
+   ```bash
+   pytest tests/
+   ```
+
 ### 3. Dashboard Development (Next.js)
 The core user console and agent builder live inside `vocall/frontend`.
 1. Navigate to the frontend folder:
@@ -166,10 +174,7 @@ The core user console and agent builder live inside `vocall/frontend`.
 
 ### 4. Landing Page Setup (Vite + React)
 To run the public-facing landing page:
-1. Return to the project root:
-   ```bash
-   cd /Users/abhisheksingh/Downloads/vocall
-   ```
+1. Return to the project root directory.
 2. Install npm dependencies:
    ```bash
    npm install
