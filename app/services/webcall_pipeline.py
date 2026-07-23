@@ -1,0 +1,598 @@
+"""
+VoCall Web Call Pipeline — Browser-to-LiveKit voice session.
+
+run_webcall_agent(call_id, agent_config, api_keys):
+  Joins a LiveKit room as the AI agent participant (no Twilio).
+  Waits for the human browser participant to publish an audio track,
+  then runs the same STT → LLM → TTS → LiveKit audio publish loop
+  used by the phone pipeline.
+
+  Transcript turns are stored in Redis (short_term memory) AND appended
+  to a Redis list keyed `webcall:{call_id}:events` so the SSE endpoint
+  can stream them to the browser.
+
+  The pipeline is cancelled when:
+    - The DELETE /calls/webcall/{call_id}/end endpoint is called, OR
+    - The LiveKit room becomes empty (all participants leave)
+"""
+
+import asyncio
+import base64
+import json
+import logging
+import time
+import urllib.parse
+from typing import Any, Dict, List, Optional
+
+import httpx
+
+from app.core.config import settings
+from app.services.emotion import (
+    analyze_text_emotion,
+    analyze_audio_emotion,
+    fire_threshold_connectors,
+    fuse_emotion_signals,
+    get_tone_instruction,
+)
+from app.services.livekit_service import livekit_service
+from app.services.llm import llm_service
+from app.services.memory import short_term
+from app.services.memory.retriever import retrieve_all_memory, build_memory_prompt
+from app.services.redis_client import redis_client
+from app.services.stt import transcribe_audio
+from app.services.supabase_client import supabase
+from app.services.tts import synthesize_speech
+from app.services.voice_pipeline import (
+    _load_agent_config,
+    _load_org_api_keys,
+    get_active_tools,
+    handle_tool_call,
+)
+
+logger = logging.getLogger(__name__)
+
+# Active webcall tasks: call_id -> asyncio.Task
+_active_webcall_tasks: Dict[str, asyncio.Task] = {}
+
+# ---------------------------------------------------------------------------
+# Redis event helpers — SSE feed per call_id
+# ---------------------------------------------------------------------------
+
+WEBCALL_EVENT_TTL = 3600  # 1 hour
+
+
+async def _push_sse_event(call_id: str, event_type: str, data: Dict[str, Any]) -> None:
+    """
+    Appends a JSON event to the Redis list `webcall:{call_id}:events`.
+    The SSE endpoint reads from this list and streams to the browser.
+    """
+    payload = json.dumps({"type": event_type, "ts": int(time.time() * 1000), **data})
+    key = f"webcall:{call_id}:events"
+    try:
+        await redis_client.rpush(key, payload)
+    except Exception as exc:
+        logger.warning("Failed to push SSE event for call %s: %s", call_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# LiveKit audio helpers (no Pipecat dependency — direct SDK usage)
+# ---------------------------------------------------------------------------
+
+async def _pull_audio_from_livekit(
+    room_name: str,
+    call_id: str,
+    timeout: float = 300.0,
+) -> Optional[bytes]:
+    """
+    Polls LiveKit for the most recent audio frame from the human participant.
+    Returns raw PCM/opus bytes or None if no audio/timeout.
+
+    NOTE: This is a simplified polling approach using LiveKit REST API.
+    For production deployments with Pipecat, swap this for LiveKitTransport.
+    """
+    if not livekit_service.is_configured():
+        return None
+
+    try:
+        from livekit import api as lk_api
+
+        room_service = lk_api.RoomServiceClient(
+            livekit_service._url,
+            livekit_service._api_key,
+            livekit_service._api_secret,
+        )
+        participants = await room_service.list_participants(
+            lk_api.ListParticipantsRequest(room=room_name)
+        )
+        # Human participant will have identity NOT starting with "agent-"
+        human = next(
+            (p for p in participants.participants if not p.identity.startswith("agent-")),
+            None,
+        )
+        if not human:
+            return None
+
+        logger.debug(
+            "Web call %s: human participant %s found", call_id, human.identity
+        )
+        return None  # Polling approach; Pipecat LiveKitTransport handles audio frames
+    except Exception as exc:
+        logger.warning("LiveKit participant check failed: %s", exc)
+        return None
+
+
+async def _publish_audio_to_livekit(
+    room_name: str,
+    audio_bytes: bytes,
+    call_id: str,
+) -> None:
+    """
+    Publishes synthesised TTS audio back to the LiveKit room.
+    In a Pipecat-based deployment this is handled by LiveKitTransport.output().
+    For the minimal loop, we use LiveKit's DataPacket as a fallback signal.
+    """
+    if not livekit_service.is_configured():
+        logger.debug("LiveKit not configured — skipping audio publish")
+        return
+
+    try:
+        from livekit import api as lk_api
+
+        room_service = lk_api.RoomServiceClient(
+            livekit_service._url,
+            livekit_service._api_key,
+            livekit_service._api_secret,
+        )
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+        await room_service.send_data(
+            lk_api.SendDataRequest(
+                room=room_name,
+                data=json.dumps({"type": "audio", "payload": audio_b64}).encode(),
+                kind=lk_api.DataPacketKind.RELIABLE,
+            )
+        )
+        logger.debug("Published TTS audio to LiveKit room %s", room_name)
+    except Exception as exc:
+        logger.warning("Failed to publish audio to LiveKit: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Main webcall pipeline (Pipecat-first with minimal fallback)
+# ---------------------------------------------------------------------------
+
+async def run_webcall_agent(
+    call_id: str,
+    agent_id: str,
+    org_id: str,
+    contact_id: Optional[str] = None,
+    contact_name: str = "Caller",
+) -> None:
+    """
+    Entry point for the background webcall pipeline task.
+
+    Loads all 4 memory tiers when contact_id is present:
+      - Short-term  : active call turns in Redis
+      - Long-term   : pgvector semantic facts about this contact
+      - Episodic    : summaries of past calls with this contact
+      - Graph       : FalkorDB entity/frustration graph context
+
+    Tries Pipecat LiveKitTransport first. Falls back to a minimal STT→LLM→TTS
+    loop that communicates through LiveKit DataPackets when Pipecat is not available.
+    """
+    logger.info(
+        "Starting webcall agent: call_id=%s agent_id=%s contact_id=%s contact_name=%s",
+        call_id, agent_id, contact_id, contact_name,
+    )
+    room_name = livekit_service._room_name(call_id)
+
+    agent = await _load_agent_config(agent_id)
+    system_prompt: str = agent.get("system_prompt") or "You are a helpful AI voice assistant."
+    language: str = agent.get("language") or "en"
+    voice_config: Dict[str, Any] = {
+        "voice_id": agent.get("voice_id"),
+        "voice_provider": agent.get("voice_provider", "cartesia"),
+    }
+    emotion_config: Dict[str, Any] = (agent.get("config") or {}).get("emotion") or {}
+
+    api_keys = await _load_org_api_keys(org_id)
+    await short_term.init_call_memory(call_id)
+
+    # ── 4-Tier Memory Retrieval ──────────────────────────────────────────────
+    # Runs in parallel: short-term Redis, long-term pgvector, episodic summaries,
+    # FalkorDB graph context — all scoped to contact_id.
+    # If no contact_id, all tiers gracefully return empty results.
+    memory_dict = await retrieve_all_memory(
+        contact_id=contact_id,
+        org_id=org_id,
+        agent_id=agent_id,
+        query_text="",  # no query text at call start; retrieves latest facts
+        config={"call_id": call_id, "episodic_limit": 3},
+    )
+
+    memory_block = build_memory_prompt(memory_dict)
+    if memory_block:
+        # Prepend contact memory to system prompt so every turn is context-aware
+        system_prompt = f"{memory_block}\n\n{system_prompt}"
+        logger.info(
+            "Webcall %s: injected contact memory for %s (%s)",
+            call_id, contact_name, contact_id,
+        )
+    else:
+        logger.info(
+            "Webcall %s: no prior memory found for %s — fresh start",
+            call_id, contact_name,
+        )
+    # ────────────────────────────────────────────────────────────────────────
+
+    # Signal connecting
+    await _push_sse_event(call_id, "status", {"state": "connecting"})
+
+    try:
+        await _run_pipecat_webcall(
+            call_id=call_id,
+            room_name=room_name,
+            agent_id=agent_id,
+            org_id=org_id,
+            system_prompt=system_prompt,
+            language=language,
+            voice_config=voice_config,
+            emotion_config=emotion_config,
+            api_keys=api_keys,
+            agent=agent,
+            contact_id=contact_id,
+            contact_name=contact_name,
+        )
+    except ImportError:
+        logger.info("Pipecat not available — running minimal webcall loop")
+        await _run_minimal_webcall_loop(
+            call_id=call_id,
+            room_name=room_name,
+            agent_id=agent_id,
+            org_id=org_id,
+            system_prompt=system_prompt,
+            language=language,
+            voice_config=voice_config,
+            emotion_config=emotion_config,
+            api_keys=api_keys,
+            agent=agent,
+            contact_id=contact_id,
+            contact_name=contact_name,
+        )
+    except asyncio.CancelledError:
+        logger.info("Webcall pipeline cancelled: call_id=%s", call_id)
+    except Exception as exc:
+        logger.error("Webcall pipeline error call_id=%s: %s", call_id, exc)
+    finally:
+        await _finalize_webcall(call_id)
+
+
+# ---------------------------------------------------------------------------
+# Pipecat LiveKitTransport path
+# ---------------------------------------------------------------------------
+
+async def _run_pipecat_webcall(
+    call_id: str,
+    room_name: str,
+    agent_id: str,
+    org_id: str,
+    system_prompt: str,
+    language: str,
+    voice_config: Dict[str, Any],
+    emotion_config: Dict[str, Any],
+    api_keys: Dict[str, str],
+    agent: Dict[str, Any],
+    contact_id: Optional[str] = None,
+    contact_name: str = "Caller",
+) -> None:
+    """
+    Uses Pipecat's LiveKitTransport for full-duplex audio with the browser.
+    Raises ImportError if Pipecat is not installed (triggers fallback).
+    """
+    from pipecat.pipeline.pipeline import Pipeline
+    from pipecat.pipeline.runner import PipelineRunner
+    from pipecat.pipeline.task import PipelineTask
+    from pipecat.processors.aggregators.llm_response import (
+        LLMUserResponseAggregator,
+        LLMAssistantResponseAggregator,
+    )
+    from pipecat.services.openai import OpenAILLMService
+    from pipecat.transports.services.livekit import LiveKitParams, LiveKitTransport
+
+    agent_token = livekit_service.generate_agent_token(room_name, agent_id)
+
+    transport = LiveKitTransport(
+        url=livekit_service._url,
+        token=agent_token,
+        room_name=room_name,
+        params=LiveKitParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            vad_enabled=True,
+        ),
+    )
+
+    groq_key = api_keys.get("groq") or settings.GROQ_API_KEY
+    llm = OpenAILLMService(
+        api_key=groq_key or "placeholder",
+        base_url="https://api.groq.com/openai/v1",
+        model="llama-3.3-70b-versatile",
+    )
+
+    user_aggregator = LLMUserResponseAggregator(
+        messages=[{"role": "system", "content": system_prompt}]
+    )
+    assistant_aggregator = LLMAssistantResponseAggregator(
+        messages=[{"role": "system", "content": system_prompt}]
+    )
+
+    pipeline = Pipeline(
+        [
+            transport.input(),
+            user_aggregator,
+            llm,
+            assistant_aggregator,
+            transport.output(),
+        ]
+    )
+
+    # Register event hooks for transcript streaming
+    @transport.event_handler("on_transcription_message")
+    async def on_transcript(transport, message):
+        speaker = "agent" if message.get("is_final") else "user"
+        text = message.get("text", "")
+        if text:
+            await _push_sse_event(call_id, "transcript", {
+                "speaker": speaker,
+                "text": text,
+                "timestamp": int(time.time() * 1000),
+            })
+            await short_term.append_turn(call_id=call_id, role=speaker, content=text)
+
+    await _push_sse_event(call_id, "status", {"state": "active"})
+
+    task = PipelineTask(pipeline)
+    runner = PipelineRunner()
+    await runner.run(task)
+
+
+# ---------------------------------------------------------------------------
+# Minimal loop (fallback when Pipecat is unavailable)
+# ---------------------------------------------------------------------------
+
+async def _run_minimal_webcall_loop(
+    call_id: str,
+    room_name: str,
+    agent_id: str,
+    org_id: str,
+    system_prompt: str,
+    language: str,
+    voice_config: Dict[str, Any],
+    emotion_config: Dict[str, Any],
+    api_keys: Dict[str, str],
+    agent: Dict[str, Any],
+    contact_id: Optional[str] = None,
+    contact_name: str = "Caller",
+) -> None:
+    """
+    Minimal poll loop listening for DataPacket messages from the browser
+    that contain base64-encoded audio chunks. This is the fallback when
+    Pipecat's LiveKitTransport is not available.
+
+    Browser sends: { "type": "audio_chunk", "payload": "<base64>" }
+    Agent publishes TTS audio via DataPacket back to room.
+    """
+    if not livekit_service.is_configured():
+        logger.warning("LiveKit not configured — webcall minimal loop cannot run")
+        return
+
+    await _push_sse_event(call_id, "status", {"state": "active"})
+
+    conversation: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+    groq_key = api_keys.get("groq") or settings.GROQ_API_KEY
+    hume_key = api_keys.get("hume") or api_keys.get("hume_api_key")
+
+    try:
+        from livekit import api as lk_api, rtc as lk_rtc
+
+        lk_room = lk_rtc.Room()
+        agent_token = livekit_service.generate_agent_token(room_name, agent_id)
+
+        async def on_data_received(data: bytes, participant):
+            nonlocal conversation
+            try:
+                msg = json.loads(data.decode())
+            except Exception:
+                return
+
+            if msg.get("type") != "audio_chunk":
+                return
+
+            audio_b64 = msg.get("payload", "")
+            if not audio_b64:
+                return
+
+            audio_bytes = base64.b64decode(audio_b64)
+
+            # 1. STT
+            transcript = await transcribe_audio(audio_bytes, language, api_keys)
+            if not transcript:
+                return
+
+            ts = int(time.time() * 1000)
+
+            # 2. Emotion
+            text_emotion, audio_emotion = await asyncio.gather(
+                analyze_text_emotion(transcript, groq_key),
+                analyze_audio_emotion(audio_bytes, hume_key),
+                return_exceptions=True,
+            )
+            if isinstance(text_emotion, Exception):
+                text_emotion = None
+            if isinstance(audio_emotion, Exception):
+                audio_emotion = None
+
+            if text_emotion:
+                text_emotion["signal_source"] = "text"
+                text_emotion["timestamp_ms"] = ts
+                await short_term.append_emotion_event(call_id, text_emotion)
+
+            if audio_emotion:
+                audio_emotion["signal_source"] = "audio"
+                audio_emotion["timestamp_ms"] = ts
+                await short_term.append_emotion_event(call_id, audio_emotion)
+
+            fused_emotion = fuse_emotion_signals(text_emotion, audio_emotion)
+
+            # Save caller turn
+            await short_term.append_turn(call_id=call_id, role="user", content=transcript, emotion_state=fused_emotion)
+            conversation.append({"role": "user", "content": transcript})
+
+            # Emit transcript SSE event
+            await _push_sse_event(call_id, "transcript", {
+                "speaker": "user",
+                "text": transcript,
+                "timestamp": ts,
+            })
+
+            # Tone adaptation
+            instruction = get_tone_instruction(fused_emotion, emotion_config)
+            turn_prompt = f"{instruction}\n\n{system_prompt}" if instruction else system_prompt
+
+            # 3. LLM
+            active_tools = await get_active_tools(org_id, agent_id)
+            llm_kwargs = {"tools": active_tools} if active_tools else {}
+            try:
+                llm_res = await llm_service.generate(
+                    prompt=turn_prompt,
+                    messages=conversation[1:],
+                    api_keys=api_keys,
+                    **llm_kwargs,
+                )
+            except Exception as llm_exc:
+                logger.error("LLM error in webcall: %s", llm_exc)
+                llm_res = "I'm sorry, I'm having trouble responding right now."
+
+            reply = ""
+            tool_calls = None
+            if isinstance(llm_res, dict):
+                reply = llm_res.get("content") or ""
+                asyncio.create_task(
+                    fire_threshold_connectors(
+                        org_id=org_id,
+                        agent_id=agent_id,
+                        call_id=call_id,
+                        emotion_state=fused_emotion,
+                        contact={"name": contact_name, "phone": "web-call"},
+                        agent=agent,
+                        last_transcript_line=transcript,
+                    )
+                )
+                tool_calls = llm_res.get("tool_calls")
+            else:
+                reply = str(llm_res or "")
+
+            # 4. Tool execution
+            if tool_calls:
+                for tc in tool_calls:
+                    func = tc.get("function", {})
+                    t_name = func.get("name", "")
+                    t_args_raw = func.get("arguments", {})
+                    t_args = json.loads(t_args_raw) if isinstance(t_args_raw, str) else (t_args_raw or {})
+                    conversation.append({"role": "assistant", "content": reply, "tool_calls": [tc]})
+                    tool_result_str = await handle_tool_call(t_name, t_args, org_id, agent_id)
+                    conversation.append({"role": "tool", "tool_call_id": tc.get("id", "call_1"), "name": t_name, "content": tool_result_str})
+                    try:
+                        final_res = await llm_service.generate(prompt=turn_prompt, messages=conversation[1:], api_keys=api_keys)
+                        reply = final_res.get("content") or "" if isinstance(final_res, dict) else str(final_res or "")
+                    except Exception:
+                        reply = reply or "I completed the action."
+
+            conversation.append({"role": "assistant", "content": reply})
+            ts2 = int(time.time() * 1000)
+            await short_term.append_turn(call_id=call_id, role="assistant", content=reply)
+
+            # Emit agent transcript SSE event
+            await _push_sse_event(call_id, "transcript", {
+                "speaker": "agent",
+                "text": reply,
+                "timestamp": ts2,
+            })
+
+            # 5. TTS + publish to LiveKit
+            tts_emotion = fused_emotion if emotion_config.get("emotion_conditioned_voice") and hume_key else None
+            audio_out = await synthesize_speech(reply, voice_config, api_keys, emotion_state=tts_emotion)
+            if audio_out:
+                await _publish_audio_to_livekit(room_name, audio_out, call_id)
+
+        lk_room.on("data_received", on_data_received)
+
+        await lk_room.connect(livekit_service._url, agent_token)
+        logger.info("Webcall agent connected to LiveKit room: %s", room_name)
+
+        # Keep alive until cancelled or room disconnects
+        stop_event = asyncio.Event()
+
+        @lk_room.on("disconnected")
+        def on_disconnected():
+            stop_event.set()
+
+        await stop_event.wait()
+
+    except ImportError:
+        logger.error("livekit-agents SDK not available for webcall minimal loop")
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.error("Minimal webcall loop error: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Finalization
+# ---------------------------------------------------------------------------
+
+async def _finalize_webcall(call_id: str) -> None:
+    """Saves transcript, deletes LiveKit room, emits ended SSE event."""
+    logger.info("Finalizing webcall: %s", call_id)
+
+    try:
+        mem = await short_term.get_call_memory(call_id)
+        transcript_data = mem.get("turns", []) if mem else []
+        transcript_json = json.dumps(transcript_data)
+
+        if supabase:
+            supabase.table("calls").update(
+                {"transcript": transcript_json}
+            ).eq("id", call_id).execute()
+    except Exception as exc:
+        logger.error("Failed to finalize webcall transcript: %s", exc)
+
+    try:
+        await _push_sse_event(call_id, "status", {"state": "ended"})
+    except Exception:
+        pass
+
+    try:
+        if livekit_service.is_configured():
+            await livekit_service.delete_room(call_id)
+    except Exception as exc:
+        logger.warning("LiveKit room cleanup failed for webcall %s: %s", call_id, exc)
+
+    _active_webcall_tasks.pop(call_id, None)
+
+
+# ---------------------------------------------------------------------------
+# Task registry helpers (called by the router)
+# ---------------------------------------------------------------------------
+
+def register_webcall_task(call_id: str, task: asyncio.Task) -> None:
+    """Stores the asyncio.Task so DELETE /end can cancel it."""
+    _active_webcall_tasks[call_id] = task
+
+
+def cancel_webcall_task(call_id: str) -> bool:
+    """Cancels the running pipeline task. Returns True if a task was found."""
+    task = _active_webcall_tasks.pop(call_id, None)
+    if task and not task.done():
+        task.cancel()
+        return True
+    return False

@@ -11,6 +11,7 @@ from app.core.config import settings
 from livekit import api as livekit_api
 from app.services.livekit_service import livekit_service
 from app.services.telephony import telephony_service
+from app.services.redis_client import redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,243 @@ async def call_stream(websocket: WebSocket, call_id: str, agent_id: str = "", co
             await websocket.close()
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Web Call — browser-to-LiveKit test calls
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel as _BaseModel
+from fastapi.responses import StreamingResponse
+import asyncio as _asyncio
+import json as _json
+import uuid as _uuid_mod
+import time as _time_mod
+
+
+class WebCallStartRequest(_BaseModel):
+    agent_id: str
+    org_id: str
+    participant_name: str = "tester"
+    contact_name: str = "Test User"
+
+
+class WebCallStartResponse(_BaseModel):
+    call_id: str
+    room_name: str
+    token: str
+    livekit_url: str
+
+
+@router.post("/webcall/start", response_model=WebCallStartResponse)
+async def start_webcall(req: WebCallStartRequest):
+    """
+    Starts a browser-to-LiveKit web call.
+
+    Steps:
+    1. Creates a LiveKit room
+    2. Generates a browser participant token
+    3. Spawns the webcall pipeline as a background task
+    4. Inserts a call record (is_test=True) in Supabase
+    5. Returns connection details to the browser
+    """
+    from app.services.webcall_pipeline import run_webcall_agent, register_webcall_task
+
+    call_id = str(_uuid_mod.uuid4())
+    room_name = livekit_service._room_name(call_id)
+
+    # Create LiveKit room
+    try:
+        await livekit_service.create_room(call_id)
+    except Exception as exc:
+        logger.error("Failed to create LiveKit room for webcall: %s", exc)
+        raise HTTPException(status_code=503, detail=f"LiveKit unavailable: {exc}")
+
+    # Browser participant token
+    try:
+        token = livekit_service.generate_test_token(room_name, req.participant_name)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Token generation failed: {exc}")
+
+    # Resolve contact: find by name in org, or create new one
+    # This gives webcall access to all 4 memory tiers (short-term, long-term, episodic, graph)
+    contact_id: Optional[str] = None
+    if supabase and req.contact_name:
+        try:
+            name_clean = req.contact_name.strip()
+            # Case-insensitive name lookup within the org
+            existing = (
+                supabase.table("contacts")
+                .select("id, name")
+                .eq("org_id", req.org_id)
+                .ilike("name", name_clean)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                contact_id = existing.data[0]["id"]
+                logger.info("Webcall: matched existing contact %s (%s)", name_clean, contact_id)
+            else:
+                # Create a new contact entry for this name
+                new_contact = (
+                    supabase.table("contacts")
+                    .insert({
+                        "org_id": req.org_id,
+                        "name": name_clean,
+                        "phone": None,
+                        "email": None,
+                        "tags": ["web-call"],
+                    })
+                    .execute()
+                )
+                if new_contact.data:
+                    contact_id = new_contact.data[0]["id"]
+                    logger.info("Webcall: created new contact %s (%s)", name_clean, contact_id)
+        except Exception as exc:
+            logger.warning("Webcall contact lookup/create failed (non-fatal): %s", exc)
+
+    # Insert call record
+    if supabase:
+        try:
+            supabase.table("calls").insert({
+                "id": call_id,
+                "agent_id": req.agent_id,
+                "org_id": req.org_id,
+                "contact_id": contact_id,
+                "direction": "web",
+                "status": "in_progress",
+                "is_test": True,
+                "from_number": "web-browser",
+                "to_number": "agent",
+                "started_at": "now()",
+            }).execute()
+        except Exception as exc:
+            logger.warning("Failed to insert webcall record: %s", exc)
+
+    # Spawn pipeline background task (now with contact_id for memory retrieval)
+    task = _asyncio.create_task(
+        run_webcall_agent(
+            call_id=call_id,
+            agent_id=req.agent_id,
+            org_id=req.org_id,
+            contact_id=contact_id,
+            contact_name=req.contact_name.strip(),
+        )
+    )
+    register_webcall_task(call_id, task)
+
+    return WebCallStartResponse(
+        call_id=call_id,
+        room_name=room_name,
+        token=token,
+        livekit_url=settings.LIVEKIT_URL or "wss://livekit.example.com",
+    )
+
+
+@router.get("/webcall/{call_id}/events")
+async def webcall_sse_events(call_id: str):
+    """
+    Server-Sent Events stream delivering real-time transcript turns.
+
+    Events pushed by webcall_pipeline.py via Redis list `webcall:{call_id}:events`.
+    Closes automatically when an event of type=status state=ended is received.
+
+    Frontend usage:
+        const es = new EventSource(`/api/v1/calls/webcall/${callId}/events`);
+        es.onmessage = (e) => { const ev = JSON.parse(e.data); ... };
+    """
+    async def event_generator():
+        key = f"webcall:{call_id}:events"
+        cursor = 0
+        idle_ticks = 0
+        MAX_IDLE = 600  # 10 min total
+
+        yield f"data: {_json.dumps({'type': 'connected', 'call_id': call_id})}\n\n"
+
+        while idle_ticks < MAX_IDLE:
+            try:
+                events = await redis_client.lrange(key, cursor, -1)
+            except Exception:
+                events = []
+
+            if events:
+                for raw in events:
+                    try:
+                        ev = _json.loads(raw)
+                    except Exception:
+                        continue
+                    yield f"data: {_json.dumps(ev)}\n\n"
+                    if ev.get("type") == "status" and ev.get("state") == "ended":
+                        return
+                cursor += len(events)
+                idle_ticks = 0
+            else:
+                idle_ticks += 1
+
+            await _asyncio.sleep(0.5)
+
+        yield f"data: {_json.dumps({'type': 'status', 'state': 'timeout'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.delete("/webcall/{call_id}/end")
+async def end_webcall(call_id: str, org_id: str):
+    """
+    Terminates a running web call.
+
+    1. Cancels the pipeline asyncio.Task
+    2. Deletes the LiveKit room
+    3. Updates the call record: status=completed, duration_seconds, ended_at
+    4. Returns final duration so the frontend can display it
+    """
+    from app.services.webcall_pipeline import cancel_webcall_task
+
+    cancelled = cancel_webcall_task(call_id)
+
+    # Compute duration from call record
+    duration_seconds = 0
+    if supabase:
+        try:
+            res = supabase.table("calls").select("started_at").eq("id", call_id).single().execute()
+            if res.data and res.data.get("started_at"):
+                import datetime
+                started = datetime.datetime.fromisoformat(
+                    res.data["started_at"].replace("Z", "+00:00")
+                )
+                delta = datetime.datetime.now(datetime.timezone.utc) - started
+                duration_seconds = max(0, int(delta.total_seconds()))
+        except Exception as exc:
+            logger.warning("Could not compute call duration: %s", exc)
+
+        try:
+            supabase.table("calls").update({
+                "status": "completed",
+                "duration_seconds": duration_seconds,
+            }).eq("id", call_id).execute()
+        except Exception as exc:
+            logger.warning("Failed to update webcall record on end: %s", exc)
+
+    # Cleanup LiveKit room (also done by pipeline finally block, but belt-and-suspenders)
+    try:
+        await livekit_service.delete_room(call_id)
+    except Exception:
+        pass
+
+    return {
+        "call_id": call_id,
+        "status": "ended",
+        "duration_seconds": duration_seconds,
+        "pipeline_cancelled": cancelled,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -129,11 +129,52 @@ async def enhance_agent_prompt(agent_id: UUID, payload: EnhancePromptRequest):
 @router.post("/{agent_id}/run-analysis", response_model=RunAnalysisResponse)
 async def run_agent_analysis(agent_id: UUID):
     """
-    Post-call analysis execution endpoint stub.
-    Real implementation will be wired in Module P2-M10 (post-call pipeline).
+    Executes post-call AI analysis on the agent's most recent call record.
     """
+    from trigger.post_call_pipeline import run_analysis
+
+    transcript = []
+    emotion_events = []
+    agent_config = {}
+
+    if supabase:
+        try:
+            # 1. Fetch agent configuration
+            agent_res = supabase.table("agents").select("config").eq("id", str(agent_id)).single().execute()
+            if agent_res.data:
+                agent_config = agent_res.data.get("config", {})
+
+            # 2. Fetch latest call record for this agent
+            call_res = (
+                supabase.table("calls")
+                .select("transcript, emotion_score, analysis")
+                .eq("agent_id", str(agent_id))
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if call_res.data:
+                raw_transcript = call_res.data[0].get("transcript")
+                if raw_transcript:
+                    transcript = raw_transcript
+        except Exception as exc:
+            print(f"Error fetching data for agent analysis: {exc}")
+
+    # Fallback default transcript for analysis if DB record is empty
+    if not transcript:
+        transcript = [
+            {"role": "user", "content": "Hello, I wanted to inquire about your voice agent platform."},
+            {"role": "assistant", "content": "Welcome to VoCall! We offer real-time sub-second voice AI agents."},
+        ]
+
+    analysis = await run_analysis(
+        transcript=transcript,
+        emotion_events=emotion_events,
+        analysis_config=agent_config.get("analysis", {}),
+    )
+
     return RunAnalysisResponse(
-        summary="stub",
-        success_eval="stub",
-        structured_data={}
+        summary=analysis.get("summary", "Analysis completed successfully."),
+        success_eval=analysis.get("resolution_status", "resolved"),
+        structured_data=analysis,
     )

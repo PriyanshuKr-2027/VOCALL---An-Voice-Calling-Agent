@@ -71,6 +71,19 @@ async def fire_connector(
             emotion_score=float(payload.get("emotion_score", 0.0)),
             org_id=config.get("org_id", payload.get("org_id", "")),
         )
+    elif "slack" in ctype:
+        from app.services.connectors.slack import send_call_summary
+
+        return await send_call_summary(
+            bot_token=config.get("bot_token", ""),
+            channel_id=config.get("channel_id", ""),
+            agent_name=payload.get("agent_name", "Agent"),
+            contact_name=payload.get("contact_name", "Caller"),
+            call_summary=payload.get("call_summary", ""),
+            emotion_score=float(payload.get("emotion_score", 0.0)),
+            duration_seconds=int(payload.get("duration_seconds", 0)),
+            call_id=payload.get("call_id", ""),
+        )
     elif "supabase" in ctype or "postgres" in ctype:
         from app.services.connectors.supabase_conn import query_postgres, query_supabase
 

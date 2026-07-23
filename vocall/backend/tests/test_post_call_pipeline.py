@@ -97,7 +97,7 @@ async def test_post_call_pipeline_full_execution():
          patch("app.services.memory.graph.link_episodes") as mock_graph_link, \
          patch("trigger.post_call_pipeline.get_agent", new_callable=AsyncMock) as mock_get_ag, \
          patch("trigger.post_call_pipeline.run_analysis", new_callable=AsyncMock) as mock_analysis, \
-         patch("trigger.post_call_pipeline.get_post_call_connectors", new_callable=AsyncMock) as mock_get_conn, \
+         patch("trigger.post_call_pipeline.fire_post_call_connectors", new_callable=AsyncMock) as mock_get_conn, \
          patch("app.services.connectors.dispatcher.fire_connector", new_callable=AsyncMock) as mock_fire_conn, \
          patch("app.services.email.send_post_call_email", new_callable=AsyncMock) as mock_send_email, \
          patch("app.services.supabase_client.supabase") as mock_sb, \
@@ -109,7 +109,7 @@ async def test_post_call_pipeline_full_execution():
         mock_prev_ep.return_value = "prev-ep-000"
         mock_get_ag.return_value = {"id": agent_id, "name": "Support Agent", "config": {}}
         mock_analysis.return_value = {"summary": "Call resolved", "sentiment": "Positive", "action_items": []}
-        mock_get_conn.return_value = [{"type": "webhook", "config": {"url": "https://example.com/webhook"}}]
+        mock_get_conn.return_value = [{"success": True, "connector": "webhook"}]
 
         result = await post_call_pipeline(call_id, agent_id, contact_id, org_id)
 
@@ -125,6 +125,6 @@ async def test_post_call_pipeline_full_execution():
         mock_graph_ent.assert_called_once()
         mock_graph_frust.assert_called_once()
         mock_graph_link.assert_called_once()
-        mock_fire_conn.assert_called_once()
+        mock_get_conn.assert_called_once()
         mock_send_email.assert_called_once()
         mock_clear_mem.assert_called_once_with(call_id)

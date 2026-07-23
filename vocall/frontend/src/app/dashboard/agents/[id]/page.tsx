@@ -46,6 +46,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import GraphMemoryViewer from '@/components/memory/GraphMemoryViewer';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useRouter } from 'next/navigation';
+import WebCallModal from '@/components/agent/WebCallModal';
 
 // Prompt templates
 const USE_CASE_TEMPLATES: Record<string, string> = {
@@ -358,6 +359,10 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
   const [isDeletingAgent, setIsDeletingAgent] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
 
+  // Web Call state
+  const [isWebCallOpen, setIsWebCallOpen] = useState(false);
+  const [orgId, setOrgId] = useState<string>('');
+
   const handleDeleteAgent = async () => {
     setIsDeletingAgent(true);
     try {
@@ -384,6 +389,7 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
       const agentData = agent as any;
       if (agentData) {
         setAgentName(agentData.name);
+        if (agentData.org_id) setOrgId(agentData.org_id);
         if (agentData.system_prompt) setSystemPrompt(agentData.system_prompt);
         if (agentData.published !== undefined) setPublished(agentData.published);
         if (agentData.enable_emotion !== undefined) setEnableEmotion(agentData.enable_emotion);
@@ -592,7 +598,12 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
             <span>Voice</span>
           </Button>
 
-          <Button variant="outline" size="sm" className="gap-1.5 border-slate-700 text-[#A78BFA] border-[#7C3AED]/40">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsWebCallOpen(true)}
+            className="gap-1.5 border-[#7C3AED]/50 text-[#A78BFA] hover:bg-[#7C3AED]/20 hover:border-[#7C3AED] transition"
+          >
             <PhoneCall className="w-4 h-4" />
             <span>Talk To Agent</span>
           </Button>
@@ -1193,6 +1204,15 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
         isLoading={isDeletingAgent}
         onConfirm={handleDeleteAgent}
         onCancel={() => setDeleteAgentModalOpen(false)}
+      />
+
+      {/* Web Call Modal */}
+      <WebCallModal
+        isOpen={isWebCallOpen}
+        onClose={() => setIsWebCallOpen(false)}
+        agentId={params.id}
+        agentName={agentName}
+        orgId={orgId}
       />
     </div>
   );
