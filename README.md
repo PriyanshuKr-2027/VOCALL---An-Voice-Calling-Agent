@@ -1,14 +1,18 @@
 # VoCall — Open-Source Voice Agent Platform
 
-VoCall is an enterprise-grade, open-source voice agent platform designed for building, orchestrating, and deploying low-latency real-time voice AI agents. It features a dual-signal emotion analysis engine and a unique 4-tier memory architecture to enable natural, contextual, and high-empathy voice conversations.
-
-> [!NOTE]
-> **Attribution:** The dashboard UI patterns are adapted from Unpod ([github.com/unpod-ai/unpod](https://github.com/unpod-ai/unpod)), licensed under the MIT License.
+VoCall is an enterprise-grade, open-source voice agent platform designed for building, orchestrating, and deploying low-latency real-time voice AI agents. It features a **VA-ICECoT Intent Engine**, a **Dual-Signal Emotion Analysis Engine**, and a unique **4-Tier Hybrid Memory Architecture** to enable natural, contextual, dynamic, and high-empathy voice conversations.
 
 ---
 
 ## Table of Contents
 1. [Key Features](#key-features)
+   - [🎯 Intent Engine & VA-ICECoT](#-intent-engine--va-icecot)
+   - [🎙️ Speech & Voice AI (STT & TTS)](#-speech--voice-ai-stt--tts)
+   - [🎭 Dual-Signal Emotion Engine](#-dual-signal-emotion-engine)
+   - [🧠 4-Tier Hybrid Memory System](#-4-tier-hybrid-memory-system)
+   - [🛠️ Agent Studio & AI Prompt Enhancer](#️-agent-studio--ai-prompt-enhancer)
+   - [📞 Telephony & Web Voice Integrations](#-telephony--web-voice-integrations)
+   - [⚙️ Multi-Connector Actions & Workflows](#️-multi-connector-actions--workflows)
 2. [Project Architecture](#project-architecture)
 3. [Directory Structure](#directory-structure)
 4. [Prerequisites](#prerequisites)
@@ -26,46 +30,71 @@ VoCall is an enterprise-grade, open-source voice agent platform designed for bui
 
 ## Key Features
 
+### 🎯 Intent Engine & VA-ICECoT
+*Voice-Agent Intent, Slot & Emotion Chain-of-Thought*
+- **Real-Time Intent Classification:** Powered by zero-shot LLM intent detection (`detector.py`), classifying caller goals (e.g., `book_appointment`, `file_complaint`, `request_refund`, `billing_inquiry`) with live confidence scoring.
+- **Dynamic Slot Extraction & Validation:** Tracks required vs. optional slot parameters during dialogue turns (`slot_manager.py`). Prompts callers naturally for missing details before executing actions.
+- **Automated Connector Chains:** Once all required slots are 100% resolved (`resolver.py`), VoCall automatically executes bound connectors (e.g., Google Calendar appointment creation, HubSpot lead updates, or custom HTTP webhooks).
+- **Emotion × Intent Matrix Rules:** Multi-dimensional rule engine (`combined_rules.py`) that evaluates caller emotional state alongside intent. *Example: IF Intent == "cancel_subscription" AND Emotion == "frustrated" THEN execute "escalate_to_supervisor" with a priority transfer tag.*
+- **Call Compliance & Guardrails:** Integrated compliance engine (`va_icecot.py`) enforcing mandatory disclaimers, call recording disclosures, and transaction safety checks before executing sensitive backend operations.
+
 ### 🎙️ Speech & Voice AI (STT & TTS)
 - **Speech-to-Text (STT):** Auto-routed based on language. Uses **Groq (Whisper-large-v3)** for low-latency English transcription (~150ms) and **Sarvam AI (Saarika v2)** for natural Hinglish code-switched understanding (~200ms).
 - **Text-to-Speech (TTS):** Generates voice replies using **Cartesia (Sonic-2)** for sub-80ms English speech, **Sarvam AI (Bulbul v2)** for native Hindi/Hinglish speech, and **Hume AI (Octave 2)** for emotion-conditioned voice generation.
 
-### 🧠 4-Tier Memory System (VoCall-Exclusive)
-- **Short-Term Memory:** Live conversation transcript and emotional state buffer powered by **Upstash Redis** (cleared post-call).
-- **Long-Term Memory:** Semantic facts and user preferences stored as embeddings in **Supabase pgvector** (retrieved via cosine similarity).
-- **Episodic Memory:** Structured post-call summaries and historical context stored in **Supabase Postgres** (retrieves the last 3 call summaries).
-- **Knowledge Graph Memory:** Entity-relationship graphs built with **FalkorDB** to track long-term relationship patterns, billing issues, and frustration paths across multiple calls.
-- **DPDP Compliance:** Single-click "Forget Me" compliance that cascades deletion of all memory tiers for a contact to satisfy India's Digital Personal Data Protection Act 2023.
-
 ### 🎭 Dual-Signal Emotion Engine
-- **Text Emotion Signal:** Real-time Groq Llama-3.3-70b NLP analysis on text transcripts.
-- **Audio Emotion Signal:** Real-time paralinguistic tone analysis directly from caller audio via **Hume AI EVI**.
-- **Emotion Fusion:** Combines audio and text cues to compute a unified valence/arousal state, triggering dynamic system prompt changes (e.g., empathetic tone shift when valence drops) and auto-routing/escalation rules.
+- **Text Emotion Signal:** Real-time Groq Llama-3.3-70b NLP analysis on text transcripts per turn.
+- **Audio Emotion Signal:** Real-time paralinguistic tone analysis (pitch, cadence, stress) directly from caller audio via **Hume AI EVI**.
+- **Emotion Fusion Engine:** Combines audio and text cues to compute a unified valence/arousal score ($Valence_{fused} = 0.6 \cdot Audio + 0.4 \cdot Text$).
+- **Adaptive Voice & Prompt Shifts:** Dynamically injects tone-softening instructions into system prompts when valence drops, and modulates Hume Octave TTS voice pitch and speed in real-time.
+
+### 🧠 4-Tier Hybrid Memory System
+```text
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                4-TIER HYBRID MEMORY MATRIX                              │
+├─────────────────┬───────────────────┬───────────────────┬───────────────────────────────┤
+│ Tier            │ Storage Engine    │ Scope             │ Primary Function              │
+├─────────────────┼───────────────────┼───────────────────┼───────────────────────────────┤
+│ 1. Short-Term   │ Upstash Redis     │ Active Call       │ Live transcript & turn buffer │
+│ 2. Long-Term    │ Supabase pgvector │ Contact Semantic  │ Top-5 vector fact retrieval   │
+│ 3. Episodic     │ Supabase Postgres │ Contact History   │ Last 3 post-call summaries    │
+│ 4. Knowledge    │ FalkorDB          │ Contact Relational│ Cypher entity relationship    │
+└─────────────────┴───────────────────┴───────────────────┴───────────────────────────────┘
+```
+- **DPDP Compliance ("Forget Me"):** Single API call (`DELETE /api/contacts/{id}/memory`) cascades deletion across Redis, pgvector, Postgres, and FalkorDB graph to comply with India's Digital Personal Data Protection Act 2023.
+
+### 🛠️ Agent Studio & AI Prompt Enhancer
+- **Prompt-First Builder:** Intuitive free-text system instruction editor serving as the primary configuration surface.
+- **AI Prompt Enhancer:** One-click prompt optimization (`POST /api/agents/{id}/enhance-prompt`) powered by Groq Llama-3.3-70b (~400ms latency).
+- **Domain Metadata Scraper:** Automatically scrape company websites (`POST /api/import-domain`) to extract brand voice, services, and core knowledge.
+- **Pre-Built Templates & Dual View:** One-click use case templates (Customer Support, Sales, Booking, Healthcare, Debt Recovery) and code/visual toggle mode (`agents.config`).
 
 ### 📞 Telephony & Web Voice Integrations
-- **Web Browser Calling:** Instant in-browser WebRTC voice agent testing via **LiveKit WebCall pipeline** and interactive modal (`WebCallModal`).
-- **Twilio:** Used for rapid development, testing, and streaming raw telephony audio via WebSockets.
-- **Exotel / Plivo:** Bring Your Own Key (BYOK) integrations for low-cost, TRAI-compliant telephony in India.
+- **Web Voice Studio (`WebCallModal`):** Instant in-browser WebRTC testing with live visual status orb, real-time transcript streaming, and contact linking for memory validation.
+- **Twilio PSTN:** Telephony integration with raw audio WebSocket streaming.
+- **BYOK Indian Telephony (Exotel / Plivo):** Low-cost, TRAI-compliant India dialing with DLT headers and document verification.
 
 ### ⚙️ Multi-Connector Actions & Workflows
-- **During-Call Tools:** mid-call operations via LLM function calling (Google Calendar appointments, HubSpot leads, database queries, and custom webhooks).
-- **Post-Call Pipeline:** Triggered asynchronously via **Trigger.dev** to generate summaries, write episodic memory, update the knowledge graph, and send WhatsApp/Email alerts.
+- **During-Call Tools:** Mid-call execution via LLM function calling (Google Calendar, HubSpot, internal DB queries, custom HTTP webhooks).
+- **Post-Call Pipeline (Trigger.dev):** Asynchronous post-call processing for transcript evaluation, episodic memory summarization, knowledge graph updates, and WhatsApp/Email dispatch.
+- **Connector Configs:** Centralized credential management (`connector_configs`) for seamless multi-agent tool binding.
 
 ---
 
 ## Project Architecture
 
-The repository is organized into three major components:
-1. **Landing Page:** A lightweight, high-performance showcase website built with React, Vite, and Tailwind CSS v4.
-2. **Dashboard Web App:** A Next.js 14 application providing full organization settings, agent configuration tabs, contact details, memory visualizations (FalkorDB graphs), in-browser Web Voice Call testing, call history, and Recharts-based analytics consoles.
-3. **Backend API:** A Python FastAPI service handling WebSocket and WebRTC connections from LiveKit/Twilio, LLM completions, memory lookups, and webhook routing.
-
 ```mermaid
 graph TD
-    User([Caller Phone / Web Browser]) <--> Twilio[Twilio / LiveKit WebCall]
-    Twilio <-->|WebSocket Stream / WebRTC| LiveKit[LiveKit Media Room]
+    User([Caller Phone / Web Browser]) <--> Telephony[Twilio / Exotel / LiveKit WebCall]
+    Telephony <-->|WebSocket Stream / WebRTC| LiveKit[LiveKit Media Room]
     LiveKit <-->|WebRTC| FastAPI[FastAPI Backend]
-    FastAPI <-->|Redis STM| Upstash[Upstash Redis]
+    
+    subgraph Core Engine
+        FastAPI <-->|Intent & Slots| Intent[Intent Engine & VA-ICECoT]
+        FastAPI <-->|Text + Paralinguistics| Emotion[Dual-Signal Emotion Fusion]
+    end
+
+    FastAPI <-->|Redis Short-Term| Upstash[Upstash Redis]
     FastAPI <-->|Embeddings pgvector| Supabase[Supabase Database]
     FastAPI <-->|Cypher Queries| Falkor[FalkorDB Graph]
     FastAPI <-->|Inference| Groq[Groq / Cerebras LLM]
@@ -84,22 +113,22 @@ graph TD
 ├── app/                      # FastAPI Backend (Python)
 │   ├── core/                 # Configuration & settings management
 │   ├── models/               # SQLAlchemy / SQLModel schemas
-│   ├── routers/              # API Route controllers (agents, calls, memory, etc.)
-│   ├── services/             # STT, TTS, LLM, Redis, FalkorDB, & WebCall pipeline
+│   ├── routers/              # API Route controllers (agents, calls, intent, memory, connectors)
+│   ├── services/             # STT, TTS, LLM, Intent Engine, Emotion Fusion, LiveKit Service
 │   └── main.py               # Backend application entry point
 ├── components/               # Frontend component sharing & TypeScript templates
 ├── Documentation/            # Detailed PRD, Architecture, Features, and Design docs
 ├── src/                      # Landing Page Frontend (Vite + React + Tailwind v4)
-├── supabase/                 # Supabase configuration & migrations
+├── supabase/                 # Supabase configuration, queries, & SQL migrations
 ├── tests/                    # Pytest backend test suite
 ├── trigger/                  # Trigger.dev background jobs
-├── vocall/                   # Alternative monorepo configuration (Next.js frontend + FastAPI backend)
+├── vocall/                   # Full Monorepo Setup (Next.js dashboard + FastAPI backend)
 │   ├── docs/                 # UI requirement and changes documentation
 │   ├── frontend/             # Next.js 14 App Router, TypeScript, shadcn/ui Dashboard & WebCallModal
 │   └── backend/              # Alternative FastAPI layout
 ├── docker-compose.yml        # Multi-container local deployment orchestration
 ├── package.json              # Landing page frontend package manifest
-└── README.md                 # Project main documentation
+└── README.md                 # Main project documentation
 ```
 
 ---
@@ -124,12 +153,11 @@ If you are developing locally or using Supabase Cloud:
    supabase link --project-ref your-project-ref
    supabase db push
    ```
-   *This applies the `20260722_connector_configs.sql` migration and configures the `connector_configs` tables and row-level security (RLS).*
+   *This applies database setup scripts and configures tables, pgvector extensions, row-level security (RLS), and connector configurations.*
 
 ### 2. Backend Development (FastAPI)
-1. Navigate to the backend folder and create a virtual environment:
+1. Navigate to the root directory and activate a virtual environment:
    ```bash
-   # From root directory:
    python -m venv venv
    source venv/bin/activate  # On Windows: .\venv\Scripts\activate
    ```
@@ -162,7 +190,7 @@ The core user console and agent builder live inside `vocall/frontend`.
    ```bash
    npm install
    ```
-3. Set up frontend environment parameters (you can symlink or copy `.env` from the root):
+3. Set up frontend environment parameters:
    ```bash
    cp ../.env.example .env.local
    ```
@@ -223,7 +251,7 @@ Ensure the following variables are configured in your `.env` files:
 
 ## Docker Compose Deployment
 
-To spin up the entire stack locally—including **FalkorDB** graph engine, Redis, the backend, and both frontends—run:
+To spin up the entire stack locally—including **FalkorDB** graph engine, Redis, backend API, and Next.js frontend—run:
 
 ```bash
 docker-compose up -d --build

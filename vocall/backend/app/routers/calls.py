@@ -84,7 +84,6 @@ async def get_call_memory_debug(call_id: UUID, org_id: Optional[UUID] = None):
 async def generate_livekit_token(req: LiveKitTokenRequest):
     """
     Generates a LiveKit JWT token for connecting to real-time voice call rooms.
-    Adapts LiveKit room/token management patterns from Unpod background services.
     """
     api_key = settings.LIVEKIT_API_KEY
     api_secret = settings.LIVEKIT_API_SECRET

@@ -1,5 +1,5 @@
 """
-VoCall LiveKit Service — adapted from Unpod apps/super/ LiveKit patterns.
+VoCall LiveKit Service.
 
 Provides:
   create_room(call_id)             → creates an audio-only LiveKit room
@@ -25,8 +25,7 @@ class LiveKitService:
     """
     Thin wrapper around the LiveKit server-side SDK.
 
-    Pattern adapted from Unpod apps/super/ background service LiveKit
-    room/token management. Modified for audio-only VoCall use-case:
+    Room/token management configured for audio-only VoCall use-case:
       - No video track grants
       - Room metadata encodes call_id for downstream pipeline routing
       - Tokens have a 4-hour TTL (covers maximum realistic call duration)
