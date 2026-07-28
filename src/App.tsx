@@ -305,6 +305,11 @@ export default function App() {
             }}
             onNavigateToSection={handleSectionChange}
             telephonyNumbers={telephonyNumbers}
+            onSaveCall={(newCall) => {
+              setCalls((prev) => [newCall, ...prev]);
+              setSelectedCallId(newCall.id);
+              setSection('calls');
+            }}
           />
         )}
         {(section === 'contacts' && selectedContact) && (

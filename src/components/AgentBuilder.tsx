@@ -4,6 +4,7 @@ import {
   Sparkles,
   Volume2,
   Phone,
+  PhoneCall,
   Brain,
   Smile,
   Sliders,
@@ -19,6 +20,7 @@ import {
   Trash2,
   Bot
 } from 'lucide-react';
+import WebCallModal from './WebCallModal';
 
 interface AgentBuilderProps {
   agent: any;
@@ -27,6 +29,7 @@ interface AgentBuilderProps {
   onSelectCall: (id: string) => void;
   onNavigateToSection: (section: string) => void;
   telephonyNumbers: any[];
+  onSaveCall?: (callData: any) => void;
 }
 
 export default function AgentBuilder({
@@ -35,11 +38,13 @@ export default function AgentBuilder({
   callsList,
   onSelectCall,
   onNavigateToSection,
-  telephonyNumbers
+  telephonyNumbers,
+  onSaveCall
 }: AgentBuilderProps) {
   const [activeTab, setActiveTab] = useState<string>('identity');
   const [isCodeMode, setIsCodeMode] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isWebCallOpen, setIsWebCallOpen] = useState(false);
   
   // Modal configurations
   const [activeModal, setActiveModal] = useState<string | null>(null);
@@ -154,8 +159,21 @@ export default function AgentBuilder({
           <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }}>
             Chat Sandbox
           </button>
-          <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }}>
-            Live Call
+          <button
+            className="btn btn-secondary"
+            onClick={() => setIsWebCallOpen(true)}
+            style={{
+              padding: '8px 14px',
+              fontSize: '0.8rem',
+              borderColor: 'rgba(124, 58, 237, 0.5)',
+              color: 'var(--accent-color)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <PhoneCall size={14} />
+            <span>Talk To Agent</span>
           </button>
           <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.8rem' }}>
             Publish
@@ -1047,6 +1065,14 @@ export default function AgentBuilder({
           </div>
         </div>
       )}
+
+      {/* WEB CALL TESTING MODAL */}
+      <WebCallModal
+        isOpen={isWebCallOpen}
+        onClose={() => setIsWebCallOpen(false)}
+        agent={agent}
+        onSaveCall={onSaveCall}
+      />
 
     </div>
   );
