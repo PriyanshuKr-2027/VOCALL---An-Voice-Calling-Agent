@@ -7,10 +7,10 @@ from app.services.supabase_client import supabase
 router = APIRouter(prefix="/contacts", tags=["Contacts"])
 
 @router.get("", response_model=List[ContactResponse])
-async def list_contacts(org_id: UUID):
+async def list_contacts(org_id: UUID, limit: int = 50, offset: int = 0):
     if not supabase:
         return []
-    res = supabase.table("contacts").select("*").eq("org_id", str(org_id)).execute()
+    res = supabase.table("contacts").select("*").eq("org_id", str(org_id)).order("created_at", desc=True).limit(limit).offset(offset).execute()
     return res.data or []
 
 @router.post("", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)

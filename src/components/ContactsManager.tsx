@@ -21,10 +21,11 @@ import {
   Tooltip as ChartTooltip,
   ResponsiveContainer
 } from 'recharts';
+import type { Contact, Call } from '../types';
 
 interface ContactsManagerProps {
-  contact: any;
-  callsList: any[];
+  contact: Contact;
+  callsList: Call[];
   onCallNow: (contactId: string) => void;
   onSelectCall: (id: string) => void;
 }
@@ -51,7 +52,7 @@ export default function ContactsManager({ contact, callsList, onCallNow, onSelec
     .slice()
     .reverse()
     .map((c, i) => {
-      const dateObj = new Date(c.date);
+      const dateObj = new Date(c.date || Date.now());
       return {
         name: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         valence: c.emotionScore,
@@ -345,7 +346,7 @@ export default function ContactsManager({ contact, callsList, onCallNow, onSelec
                 </thead>
                 <tbody>
                   {contactCalls.map((call) => {
-                    const dateObj = new Date(call.date);
+                    const dateObj = new Date(call.date || Date.now());
                     const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                     return (
                       <tr key={call.id} style={{ borderBottom: '1px solid var(--border-color)' }}>

@@ -11,25 +11,27 @@ import {
   Database,
   Share2,
   Table,
-  Play,
   Plus,
-  Loader2,
   Clock,
-  Code,
   Eye,
   Trash2,
   Bot
 } from 'lucide-react';
 import WebCallModal from './WebCallModal';
+import AgentPromptTab from './agent/AgentPromptTab';
+import AgentVoiceTab from './agent/AgentVoiceTab';
+import AgentMemoryTab from './agent/AgentMemoryTab';
+import AgentTelephonyTab from './agent/AgentTelephonyTab';
 import { agentsApi } from '../services/api';
+import type { Agent, Call, PhoneNumber } from '../types';
 
 interface AgentBuilderProps {
-  agent: any;
-  onUpdateAgent: (id: string, updatedFields: any) => void;
-  callsList: any[];
+  agent: Agent;
+  onUpdateAgent: (id: string, updatedFields: Partial<Agent>) => void;
+  callsList: Call[];
   onSelectCall: (id: string) => void;
   onNavigateToSection: (section: string) => void;
-  telephonyNumbers: any[];
+  telephonyNumbers: PhoneNumber[];
   onSaveCall?: (callData: any) => void;
 }
 
@@ -113,16 +115,7 @@ export default function AgentBuilder({
     });
   };
 
-  const [isPlaying, setIsPlaying] = useState<string | null>(null);
-  const handlePlayVoice = (voiceName: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isPlaying === voiceName) {
-      setIsPlaying(null);
-    } else {
-      setIsPlaying(voiceName);
-      setTimeout(() => setIsPlaying(null), 3000);
-    }
-  };
+
 
   const handleOpenConnector = (connector: any) => {
     setSelectedConnector(connector);
@@ -353,331 +346,42 @@ export default function AgentBuilder({
               </>
             )}
 
-            {/* TAB 2: PERSONA */}
+            {/* TAB 2: PERSONA / PROMPT */}
             {activeTab === 'persona' && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '0.9rem', fontWeight: 600 }}>System Prompt Instructions</label>
-                  
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleEnhancePrompt}
-                      disabled={isEnhancing}
-                      style={{ padding: '6px 12px', fontSize: '0.75rem', gap: '6px' }}
-                    >
-                      {isEnhancing ? (
-                        <>
-                          <Loader2 size={12} className="animate-spin" />
-                          Enhancing...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={12} />
-                          Enhance Prompt
-                        </>
-                      )}
-                    </button>
-                    
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.75rem' }} onClick={() => setIsCodeMode(true)}>
-                      <Code size={12} style={{ marginRight: '4px' }} />
-                      Code Mode
-                    </button>
-                  </div>
-                </div>
-
-                <textarea
-                  value={agent.prompt}
-                  onChange={(e) => onUpdateAgent(agent.id, { prompt: e.target.value })}
-                  rows={10}
-                  style={{
-                    width: '100%',
-                    padding: '16px',
-                    borderRadius: 'var(--radius-lg)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--surface-color)',
-                    color: 'var(--text-primary)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.78rem',
-                    lineHeight: '1.45',
-                    outline: 'none',
-                    resize: 'vertical'
-                  }}
-                />
-
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '8px' }}>Objective presets</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {[
-                      'Customer Support', 'Sales Inquiry', 'Appointment Booking', 'HR Recruiter',
-                      'Debt Recovery', 'Healthcare Helpdesk', 'Lead Gen Qualify'
-                    ].map((chip) => (
-                      <button
-                        key={chip}
-                        onClick={() => onUpdateAgent(agent.id, { prompt: agent.prompt + `\n- Objective: Handle ${chip} queries.` })}
-                        style={{
-                          padding: '4px 10px',
-                          borderRadius: 'var(--radius-full)',
-                          border: '1px solid var(--border-color)',
-                          backgroundColor: 'transparent',
-                          color: 'var(--text-secondary)',
-                          fontSize: '0.7rem',
-                          cursor: 'pointer',
-                          transition: 'var(--transition-fast)'
-                        }}
-                      >
-                        + {chip}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
+              <AgentPromptTab
+                agent={agent}
+                onUpdateAgent={onUpdateAgent}
+                isCodeMode={isCodeMode}
+                setIsCodeMode={setIsCodeMode}
+                isEnhancing={isEnhancing}
+                handleEnhancePrompt={handleEnhancePrompt}
+              />
             )}
 
             {/* TAB 3: VOICE PROFILE */}
             {activeTab === 'voice' && (
-              <>
-                <label style={{ fontSize: '0.9rem', fontWeight: 600 }}>Select TTS Synthesizer voice</label>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  {[
-                    { name: 'Aria', provider: 'Cartesia', lang: 'English (US)', gender: 'Female', cost: 'Free', latency: '65ms' },
-                    { name: 'Sara', provider: 'Sarvam AI', lang: 'Hinglish', gender: 'Female', cost: 'Paid', latency: '85ms' },
-                    { name: 'Callum', provider: 'Cartesia', lang: 'English (UK)', gender: 'Male', cost: 'Free', latency: '70ms' },
-                    { name: 'Hume Octave', provider: 'Hume AI', lang: 'Adaptive EVI', gender: 'Unisex', cost: 'Paid', latency: '120ms' },
-                  ].map((voice) => {
-                    const isSelected = agent.voice === voice.name;
-                    const isPlayingVoice = isPlaying === voice.name;
-                    return (
-                      <div
-                        key={voice.name}
-                        onClick={() => onUpdateAgent(agent.id, { voice: voice.name })}
-                        style={{
-                          padding: '16px',
-                          borderRadius: 'var(--radius-lg)',
-                          border: isSelected ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                          backgroundColor: isSelected ? 'var(--accent-light)' : 'var(--card-color)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <button
-                            onClick={(e) => handlePlayVoice(voice.name, e)}
-                            style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '50%',
-                              backgroundColor: isPlayingVoice ? 'var(--accent-color)' : 'rgba(79, 122, 101, 0.1)',
-                              color: isPlayingVoice ? '#FFFFFF' : 'var(--accent-color)',
-                              border: 'none',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <Play size={12} fill={isPlayingVoice ? '#FFFFFF' : 'var(--accent-color)'} />
-                          </button>
-                          <div>
-                            <div style={{ fontWeight: 600 }}>{voice.name}</div>
-                            <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                              {voice.provider} • {voice.lang} • {voice.gender}
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right', fontSize: '0.7rem' }}>
-                          <div style={{ color: 'var(--accent-color)', fontWeight: 600 }}>{voice.latency}</div>
-                          <span style={{ color: voice.cost === 'Free' ? 'var(--green-accent)' : 'var(--yellow-accent)', fontWeight: 500 }}>
-                            {voice.cost}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-color)' }}>
-                  <div>
-                    <span style={{ fontWeight: 600, display: 'block' }}>Emotion-Conditioned Synthesizer</span>
-                    <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>Dynamically adapt voice tone based on caller frustration triggers (Hume EVI model).</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={agent.emotion?.enabled && agent.emotion?.signals?.audio}
-                    disabled={!(agent.emotion?.enabled && agent.emotion?.signals?.audio)}
-                    style={{ accentColor: 'var(--accent-color)', width: '16px', height: '16px' }}
-                  />
-                </div>
-              </>
+              <AgentVoiceTab
+                agent={agent}
+                onUpdateAgent={onUpdateAgent}
+              />
             )}
 
             {/* TAB 4: TELEPHONY */}
             {activeTab === 'telephony' && (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>Trunk Provider</label>
-                    <select
-                      value={agent.telephony?.provider || 'Twilio'}
-                      onChange={(e) => onUpdateAgent(agent.id, { telephony: { ...agent.telephony, provider: e.target.value } })}
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        borderRadius: 'var(--radius-md)',
-                        border: '1px solid var(--border-color)',
-                        backgroundColor: 'var(--surface-color)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      <option value="Twilio">Twilio (US/Global)</option>
-                      <option value="Plivo">Plivo (India/Int)</option>
-                      <option value="Exotel">Exotel (India Corporate)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>Assigned Phone Number</label>
-                    <select
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        borderRadius: 'var(--radius-md)',
-                        border: '1px solid var(--border-color)',
-                        backgroundColor: 'var(--surface-color)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      {telephonyNumbers
-                        .filter(n => n.provider === (agent.telephony?.provider || 'Twilio'))
-                        .map(n => (
-                          <option key={n.id} value={n.number}>{n.number} ({n.agentName || 'Unassigned'})</option>
-                        ))}
-                      {telephonyNumbers.filter(n => n.provider === (agent.telephony?.provider || 'Twilio')).length === 0 && (
-                        <option>No registered numbers. Go to settings.</option>
-                      )}
-                    </select>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '20px', backgroundColor: 'var(--surface-color)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ fontWeight: 600, display: 'block' }}>Inbound Routing Enabled</span>
-                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>Allow clients to call this number directly to trigger this agent.</span>
-                    </div>
-                    <input type="checkbox" defaultChecked style={{ accentColor: 'var(--accent-color)' }} />
-                  </div>
-                  
-                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ fontWeight: 600, display: 'block' }}>Outbound Caller ID Masking</span>
-                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>Show verified corporate name header on outbound calls.</span>
-                    </div>
-                    <input type="checkbox" defaultChecked style={{ accentColor: 'var(--accent-color)' }} />
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ alignSelf: 'flex-start', fontSize: '0.8rem' }}
-                  onClick={() => onNavigateToSection('settings')}
-                >
-                  Configure Telephony settings
-                </button>
-              </>
+              <AgentTelephonyTab
+                agent={agent}
+                onUpdateAgent={onUpdateAgent}
+                telephonyNumbers={telephonyNumbers}
+                onNavigateToSection={onNavigateToSection}
+              />
             )}
 
             {/* TAB 5: MEMORY */}
             {activeTab === 'memory' && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ fontWeight: 600, fontSize: '0.9rem', display: 'block' }}>Cognitive Memory Engine</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Allow agent to query historical facts and nodes.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onUpdateAgent(agent.id, { memory: { ...agent.memory, enabled: !agent.memory?.enabled } })}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: 'var(--radius-full)',
-                      border: 'none',
-                      backgroundColor: agent.memory?.enabled ? 'var(--accent-color)' : 'var(--border-color)',
-                      color: agent.memory?.enabled ? '#FFFFFF' : 'var(--text-secondary)',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {agent.memory?.enabled ? 'ENABLED' : 'DISABLED'}
-                  </button>
-                </div>
-
-                {agent.memory?.enabled && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {[
-                        { id: 'short', title: 'Short-term', db: 'Upstash Redis', desc: 'Hold live transcripts during active voice socket' },
-                        { id: 'long', title: 'Long-term', db: 'Supabase Vector', desc: 'Query vector details from pgvector database', slider: true, max: 10, defaultVal: 5 },
-                        { id: 'episodic', title: 'Episodic', db: 'Supabase Postgres', desc: 'Recall chronological logs from database', slider: true, max: 5, defaultVal: 3 },
-                        { id: 'graph', title: 'Knowledge Graph', db: 'FalkorDB Graph', desc: 'Tracks entity relationships and frustration patterns across calls' }
-                      ].map((tier) => (
-                        <div
-                          key={tier.id}
-                          style={{
-                            padding: '14px',
-                            borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--border-color)',
-                            backgroundColor: 'var(--surface-color)'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                            <span style={{ fontWeight: 600 }}>{tier.title}</span>
-                            <span style={{ fontSize: '0.65rem', backgroundColor: 'var(--card-color)', border: '1px solid var(--border-color)', padding: '2px 6px', borderRadius: '4px' }}>
-                              {tier.db}
-                            </span>
-                          </div>
-                          <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>{tier.desc}</p>
-                          
-                          {tier.slider && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.725rem', borderTop: '1px solid rgba(0,0,0,0.02)', paddingTop: '6px' }}>
-                              <span>Max facts retrieved:</span>
-                              <input type="range" min="1" max={tier.max} defaultValue={tier.defaultVal} style={{ flex: 1, accentColor: 'var(--accent-color)' }} />
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Right preview node SVG graph */}
-                    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', backgroundColor: 'var(--surface-color)' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)' }}>FalkorDB Context Preview</span>
-                      
-                      <svg viewBox="0 0 200 120" style={{ width: '100%', height: '100px', margin: '12px 0' }}>
-                        <line x1="100" y1="20" x2="50" y2="70" stroke="var(--border-color)" strokeWidth="1.5" />
-                        <line x1="100" y1="20" x2="150" y2="70" stroke="var(--border-color)" strokeWidth="1.5" />
-                        <line x1="50" y1="70" x2="100" y2="100" stroke="var(--border-color)" strokeWidth="1.5" />
-                        <line x1="150" y1="70" x2="100" y2="100" stroke="var(--border-color)" strokeWidth="1.5" />
-                        
-                        <circle cx="100" cy="20" r="8" fill="var(--accent-color)" />
-                        <circle cx="50" cy="70" r="8" fill="var(--accent-color)" />
-                        <circle cx="150" cy="70" r="8" fill="var(--accent-color)" />
-                        <circle cx="100" cy="100" r="8" fill="#E6E4DF" />
-                        
-                        <text x="100" y="45" fontSize="6" textAnchor="middle" fill="var(--text-secondary)">CALLS</text>
-                        <text x="125" y="85" fontSize="6" textAnchor="middle" fill="var(--text-secondary)">HAS_PLAN</text>
-                      </svg>
-
-                      <div style={{ border: '1px solid var(--border-color)', borderRadius: '4px', padding: '10px', backgroundColor: 'var(--card-color)', fontSize: '0.725rem', fontFamily: 'var(--font-mono)' }}>
-                        {"/* Prompt Injection preview */\nUser maps -> Abhi (Frustrated: Pricing)"}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
+              <AgentMemoryTab
+                agent={agent}
+                onUpdateAgent={onUpdateAgent}
+              />
             )}
 
             {/* TAB 6: EMOTION */}
@@ -993,13 +697,13 @@ export default function AgentBuilder({
                       {callsList
                         .filter(c => c.agentName === agent.name)
                         .map((call) => {
-                          const dateObj = new Date(call.date);
+                          const dateObj = new Date(call.date || Date.now());
                           const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                           return (
                             <tr key={call.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                               <td style={{ padding: '12px' }}>
                                 <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 600, backgroundColor: call.direction === 'inbound' ? 'var(--green-soft)' : 'var(--blue-soft)', color: call.direction === 'inbound' ? 'var(--green-accent)' : 'var(--blue-accent)' }}>
-                                  {call.direction.toUpperCase()}
+                                  {(call.direction || 'inbound').toUpperCase()}
                                 </span>
                               </td>
                               <td style={{ padding: '12px', fontWeight: 500 }}>{call.contactName}</td>

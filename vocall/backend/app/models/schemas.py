@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from uuid import UUID
@@ -22,9 +22,7 @@ class OrganizationUpdate(BaseModel):
 class OrganizationResponse(OrganizationBase):
     id: UUID
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 2. PROFILES
 class ProfileBase(BaseModel):
@@ -45,9 +43,7 @@ class ProfileUpdate(BaseModel):
 class ProfileResponse(ProfileBase):
     id: UUID
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 3. SPACES
 class SpaceBase(BaseModel):
@@ -63,9 +59,7 @@ class SpaceUpdate(BaseModel):
 class SpaceResponse(SpaceBase):
     id: UUID
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 4. AGENTS
 class AgentBase(BaseModel):
@@ -100,9 +94,7 @@ class AgentResponse(AgentBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 5. API KEYS
 class APIKeyCreate(BaseModel):
@@ -115,9 +107,7 @@ class APIKeyResponse(BaseModel):
     org_id: UUID
     provider: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 6. PHONE NUMBERS
 class PhoneNumberCreate(BaseModel):
@@ -134,9 +124,7 @@ class PhoneNumberResponse(BaseModel):
     provider: Optional[str] = None
     kyc_status: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 7. CONTACTS
 class ContactBase(BaseModel):
@@ -158,9 +146,7 @@ class ContactUpdate(BaseModel):
 class ContactResponse(ContactBase):
     id: UUID
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 8. CONNECTORS
 class ConnectorBase(BaseModel):
@@ -183,9 +169,7 @@ class ConnectorUpdate(BaseModel):
 class ConnectorResponse(ConnectorBase):
     id: UUID
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 9. CALLS
 class CallBase(BaseModel):
@@ -216,9 +200,7 @@ class CallResponse(CallBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LiveKitTokenRequest(BaseModel):
     room_name: str
@@ -242,9 +224,7 @@ class MemoryLongTermCreate(BaseModel):
 class MemoryLongTermResponse(MemoryLongTermCreate):
     id: UUID
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 11. MEMORY EPISODIC
 class MemoryEpisodicCreate(BaseModel):
@@ -260,9 +240,7 @@ class MemoryEpisodicCreate(BaseModel):
 class MemoryEpisodicResponse(MemoryEpisodicCreate):
     id: UUID
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # 12. EMOTION EVENTS
 class EmotionEventCreate(BaseModel):
@@ -277,6 +255,4 @@ class EmotionEventCreate(BaseModel):
 class EmotionEventResponse(EmotionEventCreate):
     id: UUID
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

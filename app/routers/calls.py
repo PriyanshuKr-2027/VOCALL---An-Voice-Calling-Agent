@@ -21,7 +21,9 @@ router = APIRouter(prefix="/calls", tags=["Calls"])
 async def list_calls(
     org_id: UUID,
     agent_id: Optional[UUID] = None,
-    direction: Optional[str] = None
+    direction: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0
 ):
     if not supabase:
         return []
@@ -31,7 +33,7 @@ async def list_calls(
     if direction and direction.lower() != "all":
         query = query.eq("direction", direction)
 
-    res = query.order("started_at", desc=True).execute()
+    res = query.order("created_at", desc=True).limit(limit).offset(offset).execute()
     return res.data or []
 
 @router.post("", response_model=CallResponse, status_code=status.HTTP_201_CREATED)

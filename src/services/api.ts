@@ -1,7 +1,4 @@
-/**
- * VoCall Unified API Service Client
- * Provides typed frontend wrappers for all FastAPI backend endpoints (/api/v1).
- */
+import type { AuthUser } from '../types';
 
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || 'http://localhost:8000/api/v1';
 const MOCK_ORG_ID = '00000000-0000-0000-0000-000000000000';
@@ -48,14 +45,14 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 // ==========================================
-// 🔐 Auth API
+// 🔐 Auth API Service
 // ==========================================
 export const authApi = {
   login: async (email: string, password: string) => {
     return request<{
       access_token: string;
       token_type: string;
-      user: { id: string; email: string; org_id: string };
+      user: AuthUser;
     }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
@@ -63,12 +60,13 @@ export const authApi = {
   },
 
   getMe: async () => {
-    return request<{ status: string; user: { id: string; email: string; org_id: string; role: string } }>('/auth/me');
+    return request<{ status: string; user: AuthUser }>('/auth/me');
   },
 };
+export const authService = authApi;
 
 // ==========================================
-// 🤖 Agents API
+// 🤖 Agents API Service
 // ==========================================
 export interface AgentPayload {
   id?: string;
@@ -136,16 +134,17 @@ export const agentsApi = {
     });
   },
 };
+export const agentService = agentsApi;
 
 // ==========================================
-// 📞 Calls API
+// 📞 Calls API Service
 // ==========================================
 export interface CallPayload {
   id?: string;
   org_id?: string;
   agent_id?: string;
   contact_id?: string;
-  direction?: 'inbound' | 'outbound' | 'webcall';
+  direction?: 'inbound' | 'outbound' | 'webcall' | string;
   from_number?: string;
   to_number?: string;
   status?: string;
@@ -197,9 +196,10 @@ export const callsApi = {
     return request<any>(`/calls/${callId}/memory?org_id=${MOCK_ORG_ID}`);
   },
 };
+export const callService = callsApi;
 
 // ==========================================
-// 📇 Contacts API
+// 📇 Contacts API Service
 // ==========================================
 export interface ContactPayload {
   id?: string;
@@ -244,9 +244,10 @@ export const contactsApi = {
     });
   },
 };
+export const contactService = contactsApi;
 
 // ==========================================
-// 🔌 Connectors API
+// 🔌 Connectors API Service
 // ==========================================
 export interface ConnectorPayload {
   id?: string;
@@ -295,9 +296,10 @@ export const connectorsApi = {
     });
   },
 };
+export const connectorService = connectorsApi;
 
 // ==========================================
-// 🔑 API Keys API
+// 🔑 API Keys API Service
 // ==========================================
 export interface APIKeyPayload {
   id?: string;
@@ -331,7 +333,7 @@ export const apiKeysApi = {
 };
 
 // ==========================================
-// 📱 Phone Numbers API
+// 📱 Phone Numbers API Service
 // ==========================================
 export interface PhoneNumberPayload {
   id?: string;
@@ -365,3 +367,4 @@ export const phoneNumbersApi = {
     });
   },
 };
+export const telephonyService = phoneNumbersApi;

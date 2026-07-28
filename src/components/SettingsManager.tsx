@@ -5,15 +5,16 @@ import {
   Trash2,
   Clock
 } from 'lucide-react';
+import type { APIKeys, PhoneNumber } from '../types';
 
 interface SettingsManagerProps {
   section: string;
   orgName: string;
   onUpdateOrgName: (name: string) => void;
-  apiKeys: any;
-  onUpdateApiKeys: (keys: any) => void;
-  telephonyNumbers: any[];
-  onAddTelephonyNumber: (num: any) => void;
+  apiKeys: APIKeys;
+  onUpdateApiKeys: (keys: APIKeys) => void;
+  telephonyNumbers: PhoneNumber[];
+  onAddTelephonyNumber: (num: PhoneNumber) => void;
   onRemoveTelephonyNumber: (id: string) => void;
 }
 

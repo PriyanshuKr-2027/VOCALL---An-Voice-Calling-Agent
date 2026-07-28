@@ -15,26 +15,14 @@ import {
   X
 } from 'lucide-react';
 import { callsApi } from '../services/api';
+import type { Agent, TranscriptMessage } from '../types';
 
 export type WebCallState = 'idle' | 'requesting_mic' | 'connecting' | 'active' | 'ended';
-
-export interface TranscriptMessage {
-  id: string;
-  sender: 'agent' | 'user';
-  text: string;
-  timestamp: string;
-}
 
 interface WebCallModalProps {
   isOpen: boolean;
   onClose: () => void;
-  agent: {
-    id?: string;
-    name: string;
-    voice?: string;
-    prompt?: string;
-    status?: string;
-  };
+  agent: Partial<Agent> & { name: string };
   onSaveCall?: (callData: {
     id: string;
     agentName: string;
@@ -188,8 +176,8 @@ export default function WebCallModal({
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
   };
 
   const handleStartCall = async () => {
