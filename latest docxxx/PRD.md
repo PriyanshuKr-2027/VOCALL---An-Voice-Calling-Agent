@@ -19,6 +19,7 @@ VoCall delivers ultra-low latency (<500ms end-to-end voice loop) with native sup
 ## 2. Problem Statement & User Personas
 
 ### 2.1 Problem Statement
+
 1. **High Latency & Robotic Delivery:** Traditional voice agents take 1.5–3 seconds to respond, breaking conversation flow and frustrating users.
 2. **Context Loss Across Calls:** Standard bots treat every call as isolated, forcing returning callers to repeat their history, context, and grievances.
 3. **Emotional Blindness:** Standard voice platforms cannot detect caller frustration, tone shifts, or distress, resulting in inappropriate bot responses and escalated churn.
@@ -28,7 +29,7 @@ VoCall delivers ultra-low latency (<500ms end-to-end voice loop) with native sup
 ### 2.2 Target Personas
 
 | Persona | Role | Key Pain Points | Desired VoCall Solution |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **AI Product Manager** | Defines agent behavior, conversational scripts, and tone | Difficulty auditing bot empathy and evaluating post-call outcomes | Agent Studio with prompt enhancers, emotion arc charts, and granular post-call analytics |
 | **Full-Stack / Voice Engineer** | Integrates telephony, CRMs, and custom backend tools | Complex WebRTC/SIP setup, high latency, fragmenting memory databases | Unified FastAPI backend, LiveKit WebCall modal, 4-tier memory API, Trigger.dev async pipelines |
 | **Customer Success / Call Center Director** | Oversees customer retention, resolution rates, and compliance | High churn from frustrated callers, lack of TRAI/DPDP compliance tools | Dual-signal emotion escalation, graph memory tracing caller grievances, DPDP "Forget Me" cascade deletion |
@@ -38,7 +39,7 @@ VoCall delivers ultra-low latency (<500ms end-to-end voice loop) with native sup
 
 ## 3. Core Product Value Proposition & Research Innovations
 
-```
+```text
 ┌───────────────────────────────────────────────────────────────────────────────────────────┐
 │                                 VOCALL PRODUCT CORE PILLARS                               │
 └─────────────────────────────┬─────────────────────────────────────────────────────────────┘
@@ -117,11 +118,19 @@ VoCall delivers ultra-low latency (<500ms end-to-end voice loop) with native sup
 - **During-Call Tools:** Mid-call LLM function calling for Google Calendar scheduling, HubSpot CRM lead capture, Supabase database queries, and custom REST webhooks.
 - **Post-Call Async Pipeline:** Trigger.dev background worker executing transcript evaluation, summary generation, pgvector fact embedding, FalkorDB graph updating, WhatsApp dispatch, and Resend email alerts.
 
+### 4.8 Intent Arc & Compliance Engine (VA-ICECoT)
+
+- **Real-time Intent & Slot Classification:** Turn-by-turn intent detection (e.g. `book_appointment`, `file_complaint`) with zero-shot slot extraction and confidence scoring.
+- **Slot Resolution Chain:** Automated trigger of backend connectors (e.g. Google Calendar API) upon 100% completion of required slot parameters.
+- **Emotion × Intent Matrix:** Multi-condition rule engine combining emotional valence/frustration scores with detected caller intents (e.g. IF Intent=`cancel_subscription` AND Emotion=`frustrated` THEN `escalate_to_human`).
+- **Call Compliance & Disclosures:** Audit log tracking regulatory disclosures, privacy consents, and compliance guardrails (`compliance_logs`).
+
 ---
 
 ## 5. Non-Functional Requirements (NFRs)
 
 ### 5.1 Performance & Latency Budgets
+
 - **Speech-to-Text (STT):** ≤ 150ms (Groq Whisper) / ≤ 200ms (Sarvam Saarika).
 - **LLM First-Token Generation:** ≤ 150ms (Groq LLaMA 3.3 70B).
 - **Text-to-Speech (TTS):** ≤ 80ms TTFAB (Cartesia Sonic-2).
@@ -129,12 +138,14 @@ VoCall delivers ultra-low latency (<500ms end-to-end voice loop) with native sup
 - **Memory RAG Retrieval:** Parallel 4-tier fanout ≤ 100ms.
 
 ### 5.2 Scalability & Availability
+
 - **Backend API:** Stateless FastAPI instance deployable on Railway/Docker, horizontal auto-scaling based on CPU/RAM.
 - **Media Pipeline:** LiveKit Cloud distributed WebRTC server infrastructure with dynamic room allocation.
 - **Database:** Supabase Postgres auto-scaling with `pgvector` indexing (`ivfflat` / `hnsw`).
 - **Redis:** Upstash serverless auto-scaling throughput.
 
 ### 5.3 Security & Compliance
+
 - **Encryption at Rest:** All BYOK API keys encrypted using AES-256 in Supabase.
 - **Encryption in Transit:** TLS 1.3 for REST/WebSockets; WebRTC SRTP for voice media.
 - **Access Control:** Supabase Row-Level Security (RLS) enforcing tenant isolation across organizations.
@@ -145,10 +156,11 @@ VoCall delivers ultra-low latency (<500ms end-to-end voice loop) with native sup
 ## 6. Success Metrics & Key Performance Indicators (KPIs)
 
 | Metric Category | Indicator | Target KPI |
-|---|---|---|
+| --- | --- | --- |
 | **Latency** | End-to-End Voice Turn Latency | < 500 ms |
 | **Voice Quality** | First-Byte Audio Latency (TTFAB) | < 100 ms |
 | **Emotion Engine** | Acoustic & Text Emotion Fusion Accuracy | > 90% correlation with human raters |
+| **Intent Engine** | Intent Classification & Slot Extraction Accuracy | > 95% accuracy (VA-ICECoT) |
 | **Memory Precision** | Relevant Context Retrieval Precision (RAG) | > 92% relevant fact injection |
 | **Task Completion** | Automated Call Task Completion Rate | > 85% without human escalation |
 | **User Experience** | Post-Call CSAT Improvement | +35% improvement vs legacy IVR |
@@ -167,4 +179,4 @@ timeline
 ```
 
 ---
-*Approved by VoCall Engineering & Product Team*
+Approved by VoCall Engineering & Product Team.

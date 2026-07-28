@@ -20,7 +20,9 @@ router = APIRouter(prefix="/calls", tags=["Calls"])
 async def list_calls(
     org_id: UUID,
     agent_id: Optional[UUID] = None,
-    direction: Optional[str] = None
+    direction: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0
 ):
     if not supabase:
         return []
@@ -30,7 +32,7 @@ async def list_calls(
     if direction and direction.lower() != "all":
         query = query.eq("direction", direction)
 
-    res = query.order("started_at", desc=True).execute()
+    res = query.order("created_at", desc=True).limit(limit).offset(offset).execute()
     return res.data or []
 
 @router.post("", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
@@ -82,7 +84,6 @@ async def get_call_memory_debug(call_id: UUID, org_id: Optional[UUID] = None):
 async def generate_livekit_token(req: LiveKitTokenRequest):
     """
     Generates a LiveKit JWT token for connecting to real-time voice call rooms.
-    Adapts LiveKit room/token management patterns from Unpod background services.
     """
     api_key = settings.LIVEKIT_API_KEY
     api_secret = settings.LIVEKIT_API_SECRET

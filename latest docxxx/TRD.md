@@ -12,7 +12,7 @@
 
 VoCall's technical architecture is engineered to resolve three primary challenges in voice AI: **high latency**, **contextual amnesia**, and **emotional blindness**. The system utilizes a hybrid serverless + real-time WebSocket/WebRTC microservices architecture.
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                 VOCALL TECHNOLOGY STACK                                      │
 ├───────────────────┬─────────────────────────────────────────────────────────────────────────┤
@@ -69,7 +69,7 @@ gantt
 
 ### 3.1 WebRTC Session Lifecycle (`/webcall`)
 
-```
+```text
 1. Browser Client opens WebCallModal ("Ananya UI")
 2. POST /api/webcall/token { agent_id, contact_name }
    ├── FastAPI validates agent & contact (creates contact row if new)
@@ -86,7 +86,7 @@ gantt
 
 ### 3.2 Inbound Telephony Session Lifecycle (`/webhooks/twilio`)
 
-```
+```text
 1. Caller dials Twilio PSTN Phone Number
 2. Twilio sends HTTP POST to FastAPI `/webhooks/twilio/inbound`
 3. FastAPI looks up agent by `phone_number` and contact by `caller_id`
@@ -105,14 +105,15 @@ gantt
 ## 4. Dual-Signal Emotion Fusion Algorithm & Technical Spec
 
 ### 4.1 Input Signals
+
 1. **Audio Signal ($E_{audio}$):** Extracted per caller turn from Hume AI Expression Measurement API ($Valence_a \in [-1, 1]$, $Arousal_a \in [0, 1]$, $Dominant_a$, $Confidence_a$).
 2. **Text Signal ($E_{text}$):** Extracted per caller turn from transcript via Groq `llama-3.3-70b` in JSON mode ($Valence_t \in [-1, 1]$, $Arousal_t \in [0, 1]$, $Dominant_t$, $Confidence_t$).
 
 ### 4.2 Mathematical Fusion Model
 
-$$Valence_{fused} = \begin{cases} 
+$$Valence_{fused} = \begin{cases}
 0.6 \cdot Valence_a + 0.4 \cdot Valence_t & \text{if } Confidence_a \ge 0.50 \\
-Valence_t & \text{if Audio unavailable or } Confidence_a < 0.50 
+Valence_t & \text{if Audio unavailable or } Confidence_a < 0.50
 \end{cases}$$
 
 $$Dominant_{fused} = \begin{cases}
@@ -141,7 +142,7 @@ Dominant_t & \text{otherwise}
 
 ## 5. 4-Tier Memory Technical Specification
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                   4-TIER MEMORY STORAGE ENGINE                                  │
 ├─────────────────┬─────────────────┬───────────────────┬─────────────────────────────────────────┤
@@ -164,7 +165,7 @@ async def retrieve_all_memory(contact_id: str, current_query: str) -> Dict[str, 
     vector_task = query_long_term_facts(contact_id, current_query, limit=5)
     episodic_task = fetch_last_episodes(contact_id, limit=3)
     graph_task = query_falkordb_graph(contact_id)
-    
+
     stm, ltm, episodes, graph = await asyncio.gather(
         redis_task, vector_task, episodic_task, graph_task
     )
@@ -243,6 +244,46 @@ CREATE TABLE memory_episodic (
     key_facts JSONB DEFAULT '[]'::jsonb,
     emotion_arc JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Intent & Compliance Engine Tables (VA-ICECoT)
+CREATE TABLE agent_intents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    confidence_threshold FLOAT DEFAULT 0.7,
+    resolution_chain JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE intent_slots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    intent_id UUID REFERENCES agent_intents(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    slot_type TEXT NOT NULL,
+    required BOOLEAN DEFAULT true,
+    prompt_question TEXT,
+    validation_regex TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE combined_emotion_intent_rules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
+    intent_name TEXT NOT NULL,
+    emotion_condition TEXT NOT NULL,
+    action TEXT NOT NULL,
+    instruction TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE compliance_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    call_id UUID REFERENCES calls(id) ON DELETE CASCADE,
+    disclosure_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    verified_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 

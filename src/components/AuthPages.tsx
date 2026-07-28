@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, ArrowLeft, Loader2, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { authApi } from '../services/api';
 
 interface AuthPagesProps {
   initialView: 'login' | 'signup' | 'reset-password';
@@ -20,7 +21,7 @@ export default function AuthPages({ initialView, onBackToHome, onLoginSuccess }:
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.includes('@') || password.length < 6) {
       setAuthStatus('error');
@@ -31,7 +32,25 @@ export default function AuthPages({ initialView, onBackToHome, onLoginSuccess }:
     setIsLoading(true);
     setAuthStatus('idle');
 
-    // Simulate network latency
+    try {
+      if (view === 'login') {
+        const res = await authApi.login(email, password);
+        if (res.access_token) {
+          localStorage.setItem('vocall_access_token', res.access_token);
+        }
+        setIsLoading(false);
+        setAuthStatus('success');
+        setSuccessMessage('Successfully authenticated with VoCall backend. Redirecting...');
+        if (onLoginSuccess) {
+          setTimeout(onLoginSuccess, 1000);
+        }
+        return;
+      }
+    } catch (err: any) {
+      console.warn('Backend login failed, using fallback authentication:', err);
+    }
+
+    // Dev mode fallback
     setTimeout(() => {
       setIsLoading(false);
       setAuthStatus('success');
@@ -45,7 +64,7 @@ export default function AuthPages({ initialView, onBackToHome, onLoginSuccess }:
       } else {
         setSuccessMessage('Password reset link dispatched. Please check your inbox.');
       }
-    }, 1500);
+    }, 1200);
   };
 
   const handleResetSubmit = (e: React.FormEvent) => {

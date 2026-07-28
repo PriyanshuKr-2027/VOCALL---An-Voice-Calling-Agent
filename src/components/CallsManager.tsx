@@ -20,9 +20,10 @@ import {
   Tooltip as ChartTooltip,
   ResponsiveContainer
 } from 'recharts';
+import type { Call } from '../types';
 
 interface CallsManagerProps {
-  call: any;
+  call: Call;
   onBackToList?: () => void;
 }
 
@@ -39,7 +40,7 @@ export default function CallsManager({ call }: CallsManagerProps) {
     );
   }
 
-  const dateObj = new Date(call.date);
+  const dateObj = new Date(call.date || Date.now());
   const formattedDate = dateObj.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -137,8 +138,8 @@ export default function CallsManager({ call }: CallsManagerProps) {
         </div>
 
         <div style={{ flex: 1, padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {(call.transcript || [
-            { sender: 'agent', text: 'Hello, thank you for calling VoCall support. How can I help you today?', time: '0:02' },
+          {(Array.isArray(call.transcript) ? call.transcript : [
+            { sender: 'agent', text: typeof call.transcript === 'string' ? call.transcript : 'Hello, thank you for calling VoCall support. How can I help you today?', time: '0:02' },
             { sender: 'user', text: 'Yes, hi. I configured an Exotel number yesterday but DLT verification is showing pending.', time: '0:14' },
             { sender: 'agent', text: 'I see. Telephony regulations in India require standard Aadhaar or corporate PAN validation. Did you upload your registration document in settings?', time: '0:28' },
             { sender: 'user', text: 'Oh, I forgot that. Let me check the settings panel now. Thanks.', time: '0:42' },
