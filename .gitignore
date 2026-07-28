@@ -38,3 +38,8 @@ venv/
 .next/
 .out/
 
+# Worktrees
+Ananya frontend/
+abhishek ui/
+
+

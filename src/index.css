@@ -1,42 +1,280 @@
-@import "tailwindcss";
+/* VoCall Premium Design System Foundation */
 
 :root {
-  --background: #f6f5f2;
-  --surface: #fcfbf8;
-  --card: #ffffff;
-  --border: #e6e4df;
-  --foreground: #202124;
-  --muted-foreground: #6b6b6b;
-  --muted: #efede8;
-  --accent: #4f7a65;
-  --radius: 16px;
-  --shadow-card: 0 1px 3px rgba(32, 33, 36, 0.04), 0 8px 24px -6px rgba(32, 33, 36, 0.08);
-  --shadow-elevated: 0 1px 2px rgba(32, 33, 36, 0.05), 0 30px 80px -30px rgba(32, 33, 36, 0.25);
+  /* Warm Neutral Palette */
+  --bg-color: #F6F5F2;
+  --surface-color: #FCFBF8;
+  --card-color: #FFFFFF;
+  --border-color: #E6E4DF;
+  --border-hover: #D5D2C9;
+  
+  /* Text Colors */
+  --text-primary: #202124;
+  --text-secondary: #6B6B6B;
+  --text-tertiary: #A19F97;
+  
+  /* Accent Colors (Soft Sage Green) */
+  --accent-color: #4F7A65;
+  --accent-hover: #3E6150;
+  --accent-light: #EBF1EE;
+  
+  /* Alert / Emotional Indicators */
+  --red-soft: #F9EBEB;
+  --red-accent: #C94C4C;
+  --green-soft: #ECF7F2;
+  --green-accent: #2D9D78;
+  --yellow-soft: #FAF5E6;
+  --yellow-accent: #C79E24;
+  --blue-soft: #EEF4F8;
+  --blue-accent: #3A82B8;
+
+  /* Typography */
+  --font-heading: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Roboto Mono, monospace;
+
+  /* Shadows & Radius */
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --radius-full: 9999px;
+
+  --shadow-subtle: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-premium: 0 16px 40px rgba(32, 33, 36, 0.04), 0 2px 8px rgba(32, 33, 36, 0.02);
+  --shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+
+  /* Transition Curve */
+  --transition-smooth: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast: all 0.15s ease;
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+/* Reset & Base Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
-.font-display {
-  font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-/* Custom Scrollbar */
+/* Clean Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
+
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--bg-color);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 9999px;
+  background: var(--border-color);
+  border-radius: var(--radius-full);
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
+  background: var(--text-tertiary);
+}
+
+/* Heading Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+h1 {
+  font-size: 3.5rem;
+  letter-spacing: -0.03em;
+}
+
+h2 {
+  font-size: 2.25rem;
+}
+
+h3 {
+  font-size: 1.5rem;
+}
+
+p {
+  color: var(--text-secondary);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: var(--transition-fast);
+}
+
+/* App Root overrides Vite default styles */
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  width: 100%;
+  margin: 0;
+  text-align: left;
+  border-inline: none;
+}
+
+/* Layout Utilities */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.section-padding {
+  padding: 120px 0;
+}
+
+@media (max-width: 768px) {
+  h1 {
+    font-size: 2.5rem;
+  }
+  h2 {
+    font-size: 1.75rem;
+  }
+  .section-padding {
+    padding: 80px 0;
+  }
+}
+
+/* UI Atoms & Styling */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background-color: var(--accent-light);
+  color: var(--accent-color);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid rgba(79, 122, 101, 0.15);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  font-size: 0.925rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.btn-primary {
+  background-color: var(--accent-color);
+  color: #FFFFFF;
+  border: none;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background-color: var(--card-color);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+  border-color: var(--text-tertiary);
+  background-color: var(--surface-color);
+  transform: translateY(-1px);
+}
+
+.btn-text {
+  padding: 8px 16px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.btn-text:hover {
+  color: var(--text-primary);
+}
+
+/* Cards & Layouts */
+.premium-card {
+  background-color: var(--card-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-subtle);
+  transition: var(--transition-smooth);
+}
+
+.premium-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-premium);
+}
+
+/* Warm Dark Theme Override */
+[data-theme="dark"] {
+  --bg-color: #121212;
+  --surface-color: #1B1B1B;
+  --card-color: #232323;
+  --border-color: #2A2A2A;
+  --border-hover: #3A3A3A;
+  
+  --text-primary: #F8F8F8;
+  --text-secondary: #C7C7C7;
+  --text-tertiary: #8A8A8A;
+  
+  --accent-color: #C08457;
+  --accent-hover: #D79A6A;
+  --accent-light: rgba(192, 132, 87, 0.15);
+  
+  --shadow-subtle: 0 2px 8px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.12);
+  --shadow-premium: 0 16px 40px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .btn-primary {
+  background-color: #FFFFFF;
+  color: #111111;
+}
+
+[data-theme="dark"] .btn-primary:hover {
+  background-color: #E5E5E5;
+}
+
+[data-theme="dark"] .btn-secondary {
+  background-color: transparent;
+  border-color: #2E2E2E;
+  color: #F5F5F5;
+}
+
+[data-theme="dark"] .btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: #3A3A3A;
+}
+
+[data-theme="dark"] .badge {
+  border-color: rgba(192, 132, 87, 0.3);
+}
+
+/* Smooth transition for theme switching */
+body, .premium-card, nav, footer, input, textarea, button, .badge {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }

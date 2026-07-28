@@ -1,369 +1,171 @@
-# VoCall — Architecture Document
-**Version:** 1.0 | **Date:** April 2026 | **Author:** Priyanshu Kumar
+# VoCall — System Architecture Document
+
+**Document Version:** 2.0  
+**Last Updated:** July 2026  
+**Author:** Lead AI Systems Architect  
+**Status:** Approved Specification  
 
 ---
 
-## 1. High-Level Architecture
+## 1. High-Level Architecture Overview
+
+VoCall utilizes a five-tier microservices architecture separating real-time voice streaming from data storage and asynchronous background evaluation tasks:
 
 ```
-┌───────────────────────────────────────────────────────────────────────┐
-│                          CLIENT LAYER                                 │
-│   Next.js 14 Frontend (Vercel)                                        │
-│   Dashboard | Agent Builder | Contacts | Calls | Analytics            │
-│   PostHog SDK (analytics + session replay + feature flags)            │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │ REST + WebSocket
-┌───────────────────────────▼─────────────────────────────────────────┐
-│                           API LAYER                                   │
-│   FastAPI Backend (Railway)                                           │
-│   Auth | Agents | Calls | Memory | Emotion | Connectors | Webhooks    │
-│   Better Stack logs shipped from here                                 │
-└───┬──────────┬──────────┬──────────┬──────────┬─────────────────────┘
-    │          │          │          │          │
-┌───▼───┐ ┌───▼───┐ ┌────▼─────┐ ┌──▼───────┐ ┌─▼─────────────────────┐
-│Supabase│ │Upstash│ │FalkorDB │ │Voice     │ │External Services      │
-│Postgres│ │Redis  │ │(Graph   │ │Pipeline  │ │Groq (LLM/STT/emotion) │
-│pgvector│ │(STM)  │ │ Memory) │ │Pipecat + │ │Cerebras (fallback)    │
-│Auth    │ └───────┘ └─────────┘ │LiveKit   │ │Sarvam AI (HI/Hinglish)│
-│Storage │                       └──────────┘ │Cartesia (EN TTS)      │
-│Realtime│                                    │Hume AI (emotion+TTS)  │
-└────────┘                                    │Twilio/Plivo/Exotel    │
-                                              │Resend (email)          │
-┌──────────────────────────────────────────────┤PostHog / Better Stack │
-│   Background Layer (Trigger.dev)             │Polar.sh (payments)    │
-│   Post-call pipeline — no timeout limits      └────────────────────┘
-└───────────────────────────────────────────────┘
-```
-
-**Five storage/compute layers, each doing one job:**
-- **Supabase** — the system of record (orgs, agents, contacts, calls, long-term + episodic memory)
-- **Upstash Redis** — ephemeral per-call state
-- **FalkorDB** — per-contact relationship graph
-- **Voice Pipeline (Pipecat + LiveKit)** — the only layer that runs in real time, during a live call
-- **Trigger.dev** — the only layer that runs after a call ends, with no timeout constraint
-
----
-
-## 2. Frontend Structure (Next.js App Router)
-
-```
-app/
-├── (auth)/
-│   ├── login/
-│   └── signup/
-├── onboarding/                    # Org → Space → Agent → Telephony → Deploy
-├── (dashboard)/
-│   ├── page.tsx                   # Dashboard home
-│   ├── agents/
-│   │   ├── page.tsx                # Agent list
-│   │   └── [id]/page.tsx           # Agent builder (10 tabs)
-│   ├── spaces/
-│   ├── contacts/
-│   │   └── [id]/page.tsx           # Contact profile + 4-tier memory viewer
-│   ├── calls/
-│   │   └── [id]/page.tsx           # Call detail (transcript + emotion arc)
-│   ├── analytics/
-│   ├── connectors/
-│   └── settings/
-│       ├── api-keys/               # BYOK: Groq, Sarvam, Cartesia, Hume, Twilio, Plivo, Exotel, Resend
-│       └── telephony/              # Phone numbers, KYC, calling hours
-└── components/
-    ├── agent/
-    ├── memory/
-    │   ├── MemoryTierPanel.tsx     # Renders all 4 tiers
-    │   ├── GraphMemoryViewer.tsx   # FalkorDB entity graph visualization
-    │   └── MemoryInjectionPreview.tsx
-    ├── emotion/
-    │   ├── EmotionArcChart.tsx
-    │   └── EmotionSignalConfig.tsx
-    └── voice/
-        └── VoiceCard.tsx
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                     CLIENT LAYER                                        │
+│   Next.js 14 Frontend (Vercel)                                                          │
+│   Dashboard | Agent Studio | Contacts & 4-Tier Memory | WebCallModal ("Ananya UI")      │
+└────────────────────────────┬────────────────────────────────────────────────────────────┘
+                             │ REST (HTTPS) + WebRTC (SRTP) / WebSockets (WSS)
+┌────────────────────────────▼────────────────────────────────────────────────────────────┐
+│                                      API LAYER                                          │
+│   FastAPI Backend Service (Railway / Docker)                                            │
+│   Auth | Agent Router | Call Controller | 4-Tier Memory RAG | Emotion Fusion Engine     │
+└────┬──────────────┬──────────────┬──────────────┬──────────────┬────────────────────────┘
+     │              │              │              │              │
+┌────▼────┐   ┌─────▼────┐   ┌─────▼────┐   ┌─────▼────┐   ┌─────▼────────────────────────┐
+│Supabase │   │Upstash   │   │FalkorDB  │   │Voice     │   │External Provider APIs        │
+│Postgres │   │Redis     │   │(Cypher   │   │Pipeline  │   │Groq LPU (LLM 70B / Whisper)  │
+│pgvector │   │(Short-   │   │ Knowledge│   │Pipecat + │   │Cerebras AI (Fallback LLM)    │
+│Auth &   │   │ Term     │   │ Graph)   │   │LiveKit   │   │Sarvam AI (Hinglish STT/TTS)  │
+│Storage  │   │ Memory)  │   └──────────┘   └──────────┘   │Cartesia (Sonic-2 TTS)        │
+└─────────┘   └──────────┘                                 │Hume AI (EVI Emotion & TTS)   │
+┌──────────────────────────────────────────────────────────┤Twilio / Exotel / Plivo (BYOK) │
+│   Async Background Layer (Trigger.dev Engine)            └──────────────────────────────┘
+│   Post-call summary, fact extraction, graph updating     
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Backend Structure (FastAPI)
+## 2. Real-Time Media & Voice Pipeline (Pipecat + LiveKit)
 
 ```
-app/
-├── main.py                          # App entry, CORS, router registration
-├── routers/
-│   ├── auth.py | agents.py | calls.py | contacts.py
-│   ├── memory.py | emotion.py | connectors.py
-│   ├── phone_numbers.py | api_keys.py | webhooks.py
-├── services/
-│   ├── voice_pipeline.py            # Pipecat orchestration — the real-time loop
-│   ├── memory/
-│   │   ├── short_term.py            # Redis
-│   │   ├── long_term.py             # pgvector
-│   │   ├── episodic.py              # Postgres summaries
-│   │   ├── graph.py                 # FalkorDB — entities, edges, Cypher queries
-│   │   └── retriever.py             # Fans out to all 4 tiers in parallel
-│   ├── emotion/
-│   │   ├── text_signal.py           # Groq
-│   │   ├── audio_signal.py          # Hume AI Expression API
-│   │   ├── fusion.py                # Weighted merge
-│   │   └── tone_adapter.py          # Prompt injection logic
-│   ├── llm.py                       # Groq primary + Cerebras fallback routing
-│   ├── stt.py                       # Groq Whisper + Sarvam Saarika routing
-│   ├── tts.py                       # Cartesia + Sarvam Bulbul + Hume Octave routing
-│   ├── telephony.py                 # Twilio / Plivo / Exotel abstraction
-│   ├── connectors/
-│   │   ├── google_cal.py | hubspot.py | webhook.py | whatsapp.py | supabase_conn.py
-│   ├── post_call.py                 # Orchestrator called by Trigger.dev
-│   └── email.py                     # Resend
-├── models/                          # Pydantic schemas
-└── db/
-    ├── supabase.py | redis.py | falkordb.py
+Caller Phone / Web Browser ("Ananya UI")
+         │
+         ├── [WebCall] WebRTC SRTP Stream  --> LiveKit Room (LiveKit Cloud)
+         └── [Telephony] SIP WebSocket     --> Twilio / Exotel / Plivo
+                                                    │
+                                                    ▼
+                                         FastAPI Pipecat Engine
+                                                    │
+     ┌──────────────────────────────────────────────┴──────────────────────────────────────────────┐
+     │ REAL-TIME VOICE TURN LOOP                                                                   │
+     │                                                                                             │
+     │  1. Ingest Audio Packet -> Resample to 16kHz PCM                                           │
+     │  2. STT Engine: Groq Whisper Large-v3 (English) OR Sarvam Saarika (Hinglish)               │
+     │  3. Dual Emotion Engine (Parallel):                                                         │
+     │     - Audio Signal: Hume AI Expression API                                                  │
+     │     - Text Signal: Groq LLaMA 3.3 70B JSON sentiment                                       │
+     │     - Fused Valence = 0.6 * Audio + 0.4 * Text                                             │
+     │  4. LLM Generation: Groq LLaMA 3.3 70B (Streaming, TTFT ~150ms)                             │
+     │     - If Valence < -0.40: Prepend Empathetic Tone Instruction                               │
+     │  5. TTS Synthesis: Cartesia Sonic-2 (sub-80ms) OR Sarvam Bulbul / Hume Octave 2            │
+     │  6. Push Audio Frame to WebRTC Output Track & Append turn to Upstash Redis stm:{call_id}    │
+     └─────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 4. Inbound Call — Full Sequence
+## 3. 4-Tier Parallel Memory RAG Engine
 
 ```
- 1. Caller dials the VoCall-assigned number
-          │
- 2. Twilio receives the call → POST /webhooks/twilio/inbound
-          │
- 3. FastAPI:
-      - Looks up the agent by phone number
-      - Looks up (or creates) the contact by caller ID
-      - Creates a `calls` row (status: initiated)
-          │
- 4. Memory Retrieval — 4 tiers, fetched in parallel:
-      ├─ Redis        → resume check (empty for a fresh call)
-      ├─ pgvector      → top-5 semantically relevant long-term facts
-      ├─ Postgres      → last 3 episodic summaries
-      └─ FalkorDB      → entity graph: recent topics, frustration patterns,
-                          resolution chains for this contact
-          │
- 5. Build system prompt:
-      base_prompt + memory_block (all 4 tiers) + language_instruction
-          │
- 6. FastAPI returns TwiML <Stream> → Twilio opens WebSocket
-          │
- 7. LiveKit room created → Pipecat pipeline starts
-          │
- 8. REAL-TIME LOOP (repeats every caller turn):
-      ┌─────────────────────────────────────────────────────┐
-      │ a. STT   → Groq Whisper (EN) / Sarvam Saarika (HI)  │
-      │ b. Emotion (parallel):                              │
-      │      Text  → Groq NLP JSON mode                    │
-      │      Audio → Hume AI Expression API                 │
-      │      Fusion → unified emotion_state                 │
-      │      → written to Redis + emotion_events table       │
-      │ c. If valence < -0.4 → tone_instruction injected     │
-      │ d. LLM  → Groq (fallback: Cerebras) — streaming     │
-      │ e. TTS  → Cartesia / Sarvam Bulbul / Hume Octave     │
-      │      (Hume Octave used if emotion-conditioned mode)  │
-      │ f. Turn written to Redis short-term buffer            │
-      └─────────────────────────────────────────────────────┘
-          │
- 9. Call ends → Twilio POST /webhooks/twilio/status
-          │
-10. FastAPI updates `calls.status = completed`
-          │
-11. Trigger.dev job `postCallPipeline` fired (async, no timeout) — see Section 5
+                                  INBOUND CALL START
+                                          │
+                        FastAPI Parallel Memory Fanout (`retrieve_all_memory`)
+                                          │
+       ┌──────────────────┬───────────────┴───────────────┬──────────────────┐
+       │                  │                               │                  │
+┌──────▼──────┐    ┌──────▼──────┐                 ┌──────▼──────┐    ┌──────▼──────┐
+│ Upstash     │    │ Supabase    │                 │ Supabase    │    │ FalkorDB    │
+│ Redis       │    │ pgvector    │                 │ Postgres    │    │ Graph       │
+├─────────────┤    ├─────────────┤                 ├─────────────┤    ├─────────────┤
+│ Check active│    │ Cosine      │                 │ Last 3      │    │ Cypher      │
+│ call state /│    │ similarity  │                 │ episodic    │    │ entity      │
+│ resume key  │    │ top-5 facts │                 │ call        │    │ frustration │
+│             │    │             │                 │ summaries   │    │ paths       │
+└──────┬──────┘    └──────┬──────┘                 └──────┬──────┘    └──────┬──────┘
+       │                  │                               │                  │
+       └──────────────────┴───────────────┬───────────────┴──────────────────┘
+                                          │
+                                          ▼
+                      System Prompt Dynamic Context Injection:
+                      ┌───────────────────────────────────────────────┐
+                      │ [RECALLED CONTACT CONTEXT]                    │
+                      │ - Last Call Summary: {episode_summary}        │
+                      │ - Relevant Facts: {pgvector_top5_facts}       │
+                      │ - Known Frustrations: {falkordb_graph_nodes}  │
+                      └───────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. Post-Call Pipeline (Trigger.dev) — Full Sequence
+## 4. Post-Call Async Pipeline Architecture (Trigger.dev)
 
 ```
-Trigger.dev picks up the job (retries up to 3x on failure, never blocks the caller)
-
-Step 1  → Fetch full transcript + emotion_events from Redis
-Step 2  → Groq generates episodic summary (2–3 sentences + key facts, JSON mode)
-Step 3  → Groq extracts entities + topics from the transcript (JSON mode)
-Step 4  → Embed key facts → upsert into pgvector (memory_long_term), tagged with emotion_state
-Step 5  → Write new row to memory_episodic (Postgres)
-Step 6  → Update FalkorDB graph:
-             - Create/merge Entity nodes for new entities mentioned
-             - Create Episode node linked to this call
-             - Create FRUSTRATED_ABOUT edges if frustration events occurred this call
-             - Create LEADS_TO edges between causally related entities
-Step 7  → Run Analysis: Summary + Success Evaluation + Structured Data (Groq, using
-           agent's configured prompts + rubric); emotion_state auto-included in output
-Step 8  → Fire post-call connectors (WhatsApp, HubSpot, Webhook) with retry
-Step 9  → Send Resend email if configured (e.g. call-failed alert)
-Step 10 → Update `calls` row: emotion_score (avg valence), analysis JSON, transcript
-Step 11 → Clear Redis key `stm:{call_id}`
-
-All steps logged to Trigger.dev dashboard + Better Stack.
+                                      CALL ENDED EVENT
+                                              │
+                              Trigger.dev Task Fired (No Timeout)
+                                              │
+  ┌───────────────────────────────────────────┴───────────────────────────────────────────┐
+  │ POST-CALL PIPELINE EXECUTION                                                          │
+  │                                                                                       │
+  │  Step 1: Pull complete transcript and emotion buffer from Upstash Redis               │
+  │  Step 2: Generate 2-3 sentence episode summary + key extracted facts via Groq 70B     │
+  │  Step 3: Generate 1536d vector embeddings of new facts and upsert to pgvector         │
+  │  Step 4: Persist episode row in Supabase Postgres                                     │
+  │  Step 5: Extract entities/topics & execute Cypher queries in FalkorDB Knowledge Graph │
+  │  Step 6: Evaluate call CSAT score and task completion status                          │
+  │  Step 7: Dispatch post-call connectors (WhatsApp summary, HubSpot CRM, Resend email)  │
+  │  Step 8: Flush ephemeral Redis short-term key stm:{call_id}                           │
+  └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 6. Memory Architecture — 4-Tier Detail
+## 5. Hinglish Code-Switching Pipeline
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 1 — Short-Term (Upstash Redis)                            │
-│  Scope: single call                                               │
-│  Lifetime: call duration + 5 min                                  │
-│  Contains: live transcript, emotion buffer, connector results     │
-└─────────────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 2 — Long-Term (Supabase pgvector)                          │
-│  Scope: per contact, semantic                                     │
-│  Lifetime: persistent until deleted                               │
-│  Contains: embedded facts + preferences, emotion-tagged            │
-│  Query: cosine similarity, top-5 at call start                    │
-└─────────────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 3 — Episodic (Supabase Postgres)                            │
-│  Scope: per contact, chronological                                │
-│  Lifetime: persistent until deleted                               │
-│  Contains: post-call summaries, key facts, emotion arc             │
-│  Query: last 3 by recency at call start                           │
-└─────────────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 4 — Knowledge Graph (FalkorDB)                              │
-│  Scope: per contact, relational                                   │
-│  Lifetime: persistent until deleted                               │
-│  Contains: entities, topics, episodes, and the relationships       │
-│            between them (MENTIONED, FRUSTRATED_ABOUT,              │
-│            OCCURRED_IN, LEADS_TO)                                  │
-│  Query: Cypher graph traversal at call start                      │
-└─────────────────────────────────────────────────────────────────┘
-
-Injection into system prompt (all 4 merged):
-┌─────────────────────────────────────────┐
-│ [CONTACT MEMORY]                        │
-│ Previous conversations:                 │
-│  • {episode_1_summary} (emotion: calm)  │
-│  • {episode_2_summary} (emotion: upset) │
-│                                          │
-│ Known facts:                            │
-│  • {long_term_fact_1}                   │
-│  • {long_term_fact_2}                   │
-│                                          │
-│ Relationship context (graph):           │
-│  • Previously mentioned: loan, EMI      │
-│  • Historically frustrated about:       │
-│    billing, wait times                  │
-│  • Known resolution: claim #1234        │
-│    resolved March 15                    │
-└─────────────────────────────────────────┘
-```
-
-**Why 4 tiers instead of 1:** Each tier answers a different question. Redis answers "what's happening right now." pgvector answers "what facts are relevant to this topic." Postgres answers "what happened recently." FalkorDB answers "how are this contact's issues connected across time" — a question none of the other three tiers can answer.
-
----
-
-## 7. Emotion System Architecture
-
-```
-Every caller turn:
-     │
-     ├─ Audio path:  raw audio → Hume AI Expression API → {valence, arousal, dominant, confidence}
-     ├─ Text path:   transcript → Groq NLP (JSON mode)  → {valence, arousal, dominant, confidence}
-     │
-     ▼
-  Fusion:
-     if audio available: valence = 0.6·audio + 0.4·text  (audio weighted higher)
-     else:                use text only
-     dominant = audio.dominant if audio.confidence > 0.6 else text.dominant
-     │
-     ▼
-  Behaviors fired from fused emotion_state:
-     ├─ Tone adaptation      → instruction injected into LLM prompt (this turn only)
-     ├─ Voice adaptation     → emotion_state passed to Hume Octave TTS generation
-     ├─ Persistence          → written to Redis buffer + emotion_events table
-     └─ Threshold trigger    → if frustration > configured threshold, fire connector
-```
-
----
-
-## 8. Hinglish Pipeline
-
-```
-Incoming audio (Hindi / English / Hinglish mix)
+Caller Audio (Hindi / English / Hinglish Mix)
         │
-   Language detection (Sarvam AI auto-detects, or agent.language config)
+   Language Router (Sarvam AI auto-detects or agent configuration)
         │
-   STT: Sarvam Saarika v2
-        → transcript preserves natural Hindi-English code-switching as spoken
+   STT: Sarvam Saarika v2 -> Preserves exact phonetic Hinglish code-switching
         │
-   LLM: Groq llama-3.3-70b
-        System prompt appended: "Respond in the same language mix the caller
-        uses — Hindi, English, or Hinglish. Do not force English."
+   LLM: Groq LLaMA 3.3 70B + System Prompt Instruction:
+        "Respond in natural Hinglish matching the caller's language ratio. Do not force pure English."
         │
-   TTS: Sarvam Bulbul v2 (Hindi/Hinglish response)
-        OR Cartesia Sonic-2 (if response is pure English)
-        auto-selected based on the LLM's output language
+   TTS: Sarvam Bulbul v2 (Hindi/Hinglish) OR Cartesia Sonic-2 (English)
 ```
 
 ---
 
-## 9. Connector Architecture
+## 6. Security, Authentication & DPDP Compliance Topology
 
-```
-DURING CALL                              POST CALL
-Trigger: LLM tool call or emotion         Trigger: post-call pipeline (Step 8)
-threshold                                 Execution: async, fire-and-forget with
-Execution: synchronous — result           retry (max 3 attempts)
-returned to LLM in the same turn          Examples:
-Examples:                                   "Send summary" → WhatsApp
-  "Book appointment" → Google Calendar       "Update CRM" → HubSpot
-  "Log lead" → HubSpot                       "Notify team" → Webhook
-  "Query DB" → Supabase/Postgres
-  Custom → Webhook POST
-```
+- **Data Encryption:** BYOK API credentials encrypted at rest using AES-256-GCM.
+- **Tenant Isolation:** Supabase Row-Level Security (RLS) enforcing organization boundary checks (`auth.uid() -> org_id`).
+- **DPDP Act Compliance:** API endpoint `DELETE /api/contacts/{id}/memory` triggers an atomic cascading delete across Redis, pgvector, Postgres, and FalkorDB graph nodes.
 
 ---
 
-## 10. Deployment Topology
+## 7. Deployment Topology
 
-```
-Development / Demo (Free Tier):
-├── Vercel          → Next.js frontend
-├── Railway         → FastAPI backend + Pipecat runner
-├── Supabase        → Postgres + pgvector + Auth + Storage + Realtime (free)
-├── Upstash         → Redis (free, 500K commands/mo)
-├── FalkorDB        → graph memory (free tier)
-├── LiveKit Cloud   → WebRTC media server (free tier)
-├── Trigger.dev     → post-call background jobs (5K runs/mo free)
-├── Twilio          → telephony ($15 trial credit + 1 free number)
-├── PostHog         → analytics (1M events/mo free)
-└── Better Stack    → uptime + logs + status page (free)
+### 7.1 Serverless Cloud Deployment (Recommended)
+- **Frontend App:** Vercel (Next.js 14 App Router).
+- **Backend API:** Railway Container / AWS ECS (FastAPI + Pipecat).
+- **Databases:** Supabase Cloud (Postgres + pgvector), Upstash Redis Cloud, FalkorDB Cloud.
+- **Media Server:** LiveKit Cloud.
+- **Background Jobs:** Trigger.dev Cloud.
 
-Production (India, BYOK):
-├── Same as above, EXCEPT:
-├── Plivo / Exotel  → telephony (replaces Twilio, cheaper for India)
-└── Polar.sh        → payments (if/when a paid tier is added)
-
-Self-Hosted (fully independent):
-└── docker-compose.prod.yml
-    ├── nginx (SSL termination)
-    ├── next-frontend
-    ├── fastapi-backend
-    ├── livekit-server
-    ├── postgres + pgvector extension
-    ├── redis
-    └── falkordb
-```
+### 7.2 Self-Hosted Docker Compose (`docker-compose.yml`)
+- Single or multi-node container orchestration for isolated enterprise environments:
+  - `next-frontend` (Port 3000)
+  - `fastapi-backend` (Port 8000)
+  - `livekit-server` (Port 7880)
+  - `postgres-pgvector` (Port 5432)
+  - `upstash-redis` (Port 6379)
+  - `falkordb` (Port 6379 / 6380)
 
 ---
-
-## 11. Security & Compliance Architecture
-
-```
-- All BYOK API keys encrypted at rest (AES-256) in Supabase
-- Supabase Row-Level Security on every table — org-scoped access only
-- JWT authentication enforced on all FastAPI endpoints
-- HTTPS enforced everywhere; Twilio webhook signature validation
-  (X-Twilio-Signature header) on every inbound webhook
-- KYC documents stored in a private Supabase Storage bucket
-- DPDP Act 2023 compliance:
-    per-contact memory expiry + a single "forget me" endpoint that
-    cascades deletion across all 4 memory tiers (Redis, pgvector,
-    Postgres, FalkorDB)
-- Rate limiting on voice pipeline and public API endpoints
-```
-
----
-
-*End of Architecture Document v1.0*
+*Approved and Maintained by VoCall Architecture Team*
