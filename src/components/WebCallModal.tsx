@@ -176,15 +176,6 @@ export default function WebCallModal({
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
-<<<<<<< HEAD
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  };
-
-  const handleStartCall = () => {
-    if (!userName.trim()) return;
-    setCallState('requesting_mic');
-=======
     const secs = (seconds % 60).toString().padStart(2, '0');
     return `${mins}:${secs}`;
   };
@@ -200,18 +191,12 @@ export default function WebCallModal({
       console.warn('Backend LiveKit token error, using simulated session:', err);
     }
 
->>>>>>> PK-28-JULY-8PM
     setTimeout(() => {
       setCallState('connecting');
       setTimeout(() => {
         setCallState('active');
-<<<<<<< HEAD
-      }, 1800);
-    }, 600);
-=======
       }, 1200);
     }, 400);
->>>>>>> PK-28-JULY-8PM
   };
 
   const handleEndCall = () => {
@@ -219,11 +204,7 @@ export default function WebCallModal({
     setCallState('ended');
   };
 
-<<<<<<< HEAD
-  const handleSaveAndNavigate = () => {
-=======
   const handleSaveAndNavigate = async () => {
->>>>>>> PK-28-JULY-8PM
     const newCallId = `call_${Math.random().toString(36).substring(2, 9)}`;
     const callPayload = {
       id: newCallId,
@@ -239,8 +220,6 @@ export default function WebCallModal({
       ]
     };
 
-<<<<<<< HEAD
-=======
     try {
       await callsApi.create({
         agent_id: agent.id && agent.id.length === 36 ? agent.id : undefined,
@@ -255,7 +234,6 @@ export default function WebCallModal({
       console.warn('Failed to record call into backend database:', err);
     }
 
->>>>>>> PK-28-JULY-8PM
     if (onSaveCall) {
       onSaveCall(callPayload);
     }
