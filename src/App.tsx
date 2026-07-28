@@ -21,6 +21,7 @@ import ContactsManager from './components/ContactsManager';
 import CallsManager from './components/CallsManager';
 import AnalyticsPanel from './components/AnalyticsPanel';
 import SettingsManager from './components/SettingsManager';
+import { agentsApi, callsApi, contactsApi, apiKeysApi, phoneNumbersApi } from './services/api';
 
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -45,7 +46,7 @@ export default function App() {
   const [emailInput, setEmailInput] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // MOCK CORE STATE STORE
+  // MOCK CORE STATE STORE WITH BACKEND HYDRATION
   const [orgName, setOrgName] = useState('VoCall Demo');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   
@@ -134,6 +135,86 @@ export default function App() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>('a1');
   const [selectedContactId, setSelectedContactId] = useState<string | null>('c1');
   const [selectedCallId, setSelectedCallId] = useState<string | null>('cal1');
+
+  // Hydrate from FastAPI Backend when available
+  useEffect(() => {
+    async function loadBackendData() {
+      try {
+        const [remoteAgents, remoteCalls, remoteContacts, remoteNumbers, remoteKeys] = await Promise.allSettled([
+          agentsApi.list(),
+          callsApi.list(),
+          contactsApi.list(),
+          phoneNumbersApi.list(),
+          apiKeysApi.list()
+        ]);
+
+        if (remoteAgents.status === 'fulfilled' && remoteAgents.value.length > 0) {
+          const loadedAgents = remoteAgents.value.map(a => ({
+            id: a.id,
+            name: a.name,
+            status: a.published ? 'active' : 'draft',
+            voice: a.voice_id || 'Aria',
+            prompt: a.system_prompt || '',
+            description: a.system_prompt ? a.system_prompt.substring(0, 90) + '...' : 'Voice AI Agent',
+            telephony: { provider: a.voice_provider || 'Twilio' },
+            memory: { enabled: a.enable_memory ?? true },
+            emotion: { enabled: a.enable_emotion ?? true },
+            analysis: a.config?.analysis || { properties: [] }
+          }));
+          setAgents(loadedAgents);
+          if (loadedAgents.length > 0) setSelectedAgentId(loadedAgents[0].id || 'a1');
+        }
+
+        if (remoteCalls.status === 'fulfilled' && remoteCalls.value.length > 0) {
+          setCalls(remoteCalls.value.map(c => ({
+            id: c.id,
+            direction: c.direction || 'inbound',
+            contactName: c.contact_id || 'Client Caller',
+            agentName: c.agent_id || 'Voice Agent',
+            date: c.created_at || new Date().toISOString(),
+            duration: `${Math.floor((c.duration_seconds || 0) / 60)}:${((c.duration_seconds || 0) % 60).toString().padStart(2, '0')}`,
+            status: c.status || 'completed',
+            emotionScore: c.emotion_score || 0.8,
+            provider: 'LiveKit / Twilio'
+          })));
+        }
+
+        if (remoteContacts.status === 'fulfilled' && remoteContacts.value.length > 0) {
+          const loadedContacts = remoteContacts.value.map(c => ({
+            id: c.id,
+            name: c.name || 'Unnamed Contact',
+            phone: c.phone || '',
+            email: c.email || '',
+            tags: c.tags || ['Customer'],
+            notes: 'Stored in Supabase database'
+          }));
+          setContacts(loadedContacts);
+          if (loadedContacts.length > 0) setSelectedContactId(loadedContacts[0].id || 'c1');
+        }
+
+        if (remoteNumbers.status === 'fulfilled' && remoteNumbers.value.length > 0) {
+          setTelephonyNumbers(remoteNumbers.value.map(n => ({
+            id: n.id,
+            number: n.number,
+            provider: n.provider || 'Twilio',
+            agentName: null
+          })));
+        }
+
+        if (remoteKeys.status === 'fulfilled' && remoteKeys.value.length > 0) {
+          const keyMap: Record<string, string> = {};
+          remoteKeys.value.forEach(k => {
+            keyMap[k.provider] = '••••••••••••••••';
+          });
+          setApiKeys((prev: any) => ({ ...prev, ...keyMap }));
+        }
+      } catch (err) {
+        console.warn('Backend API hydration warning:', err);
+      }
+    }
+
+    loadBackendData();
+  }, []);
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -305,6 +386,11 @@ export default function App() {
             }}
             onNavigateToSection={handleSectionChange}
             telephonyNumbers={telephonyNumbers}
+            onSaveCall={(newCall) => {
+              setCalls((prev) => [newCall, ...prev]);
+              setSelectedCallId(newCall.id);
+              setSection('calls');
+            }}
           />
         )}
         {(section === 'contacts' && selectedContact) && (
