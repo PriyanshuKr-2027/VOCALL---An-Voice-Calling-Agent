@@ -353,6 +353,68 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
   const [frustrationThreshold, setFrustrationThreshold] = useState(0.7);
   const [onFrustrationConnector, setOnFrustrationConnector] = useState('');
 
+  // Memory Tab State (M49)
+  const [enableMemory, setEnableMemory] = useState(true);
+  const [enableLongTermMemory, setEnableLongTermMemory] = useState(true);
+  const [maxFactsRetrieved, setMaxFactsRetrieved] = useState(5);
+  const [enableEpisodicMemory, setEnableEpisodicMemory] = useState(true);
+  const [maxEpisodesRetrieved, setMaxEpisodesRetrieved] = useState(3);
+  const [enableKnowledgeGraph, setEnableKnowledgeGraph] = useState(true);
+
+  // Intent Tab State (M51)
+  const [enableIntent, setEnableIntent] = useState(true);
+  const [definedIntents, setDefinedIntents] = useState([
+    {
+      id: 'int-1',
+      name: 'Book Appointment',
+      slug: 'book_appointment',
+      confidence_threshold: 0.75,
+      slots: [
+        { name: 'date', required: true, ask_prompt: 'What date works best for your appointment?' },
+        { name: 'time', required: true, ask_prompt: 'What time would you prefer?' },
+        { name: 'purpose', required: false, ask_prompt: 'What is the topic of the appointment?' },
+      ],
+      resolution_chain: [
+        { connector: 'google_calendar', action: 'create_event', on_success: 'Appointment confirmed on Google Calendar for {date} at {time}.' },
+        { connector: 'supabase', action: 'insert', on_success: 'Appointment logged in database.' },
+      ],
+    },
+    {
+      id: 'int-2',
+      name: 'Request Refund',
+      slug: 'request_refund',
+      confidence_threshold: 0.80,
+      slots: [
+        { name: 'order_id', required: true, ask_prompt: 'Could you please share your Order ID?' },
+      ],
+      resolution_chain: [
+        { connector: 'hubspot', action: 'create_ticket', on_success: 'Refund request registered under ticket #{result.id}.' },
+      ],
+    },
+  ]);
+
+  const [combinedRulesList, setCombinedRulesList] = useState([
+    {
+      id: 'rule-1',
+      intent: 'request_refund',
+      emotion_condition: 'valence < -0.5 (Frustrated)',
+      action: 'human_handoff',
+      instruction: 'Caller requesting refund with high frustration. Escalate to human manager immediately.',
+    },
+    {
+      id: 'rule-2',
+      intent: 'speak_to_human',
+      emotion_condition: 'dominant = angry or frustrated',
+      action: 'human_handoff',
+      instruction: 'Immediate human handoff without resolution attempt.',
+    },
+  ]);
+
+  const [newIntentModalOpen, setNewIntentModalOpen] = useState(false);
+  const [newIntentName, setNewIntentName] = useState('');
+  const [newIntentDescription, setNewIntentDescription] = useState('');
+  const [newIntentThreshold, setNewIntentThreshold] = useState(0.75);
+
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [deleteAgentModalOpen, setDeleteAgentModalOpen] = useState(false);
@@ -656,24 +718,190 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
         </div>
       </div>
 
-      {/* 5. MEMORY TAB */}
+      {/* 5. MEMORY TAB (M49) */}
       {activeTab === 'memory' && (
         <div className="space-y-6">
-          <Card className="border-slate-800 bg-slate-900/60 p-6 space-y-2">
-            <div className="flex items-center gap-2">
-              <Brain className="w-5 h-5 text-[#A78BFA]" />
-              <h3 className="text-lg font-semibold text-white">4-Tier Memory & Knowledge Graph Context</h3>
+          {/* Master Toggle Card */}
+          <Card className="border-slate-800 bg-slate-900/60 p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-[#A78BFA]" />
+                  <h3 className="text-lg font-semibold text-white">4-Tier Memory Orchestrator</h3>
+                </div>
+                <p className="text-sm text-slate-400">
+                  Configure memory fan-out across Redis, Supabase pgvector, Postgres, and FalkorDB.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enableMemory}
+                  onChange={(e) => setEnableMemory(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#7C3AED]"></div>
+              </label>
             </div>
-            <p className="text-xs text-slate-400">
-              Preview of knowledge graph entities, topics, and causal episode links stored for this agent's contacts.
-            </p>
           </Card>
 
-          <GraphMemoryViewer
-            contactId="sample-agent-preview"
-            contactName={agentName || 'Caller'}
-            height={440}
-          />
+          {enableMemory && (
+            <>
+              {/* 4 TIER CARDS GRID */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Tier 1: Short-Term Memory */}
+                <Card className="border-slate-800 bg-slate-900/60 p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      <h4 className="font-semibold text-white text-sm">Tier 1 — Short-Term Memory</h4>
+                    </div>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-mono">
+                      Upstash Redis • Always On
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Live turn buffer & slot carry-forward namespace during active voice call session.
+                  </p>
+                </Card>
+
+                {/* Tier 2: Long-Term Semantic Memory */}
+                <Card className="border-slate-800 bg-slate-900/60 p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Database className="w-4 h-4 text-emerald-400" />
+                      <h4 className="font-semibold text-white text-sm">Tier 2 — Long-Term Memory</h4>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enableLongTermMemory}
+                        onChange={(e) => setEnableLongTermMemory(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#7C3AED]"></div>
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Supabase pgvector semantic similarity retrieval with emotion-weighted re-ranking.
+                  </p>
+                  {enableLongTermMemory && (
+                    <div className="space-y-1 pt-2 border-t border-slate-800">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-300">Max facts retrieved:</span>
+                        <span className="font-mono text-[#A78BFA]">{maxFactsRetrieved}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        value={maxFactsRetrieved}
+                        onChange={(e) => setMaxFactsRetrieved(Number(e.target.value))}
+                        className="w-full h-1.5 bg-slate-800 rounded appearance-none accent-[#7C3AED]"
+                      />
+                    </div>
+                  )}
+                </Card>
+
+                {/* Tier 3: Episodic Memory */}
+                <Card className="border-slate-800 bg-slate-900/60 p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <History className="w-4 h-4 text-blue-400" />
+                      <h4 className="font-semibold text-white text-sm">Tier 3 — Episodic Memory</h4>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enableEpisodicMemory}
+                        onChange={(e) => setEnableEpisodicMemory(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#7C3AED]"></div>
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Supabase Postgres chronological episode summaries of past calls with this contact.
+                  </p>
+                  {enableEpisodicMemory && (
+                    <div className="space-y-1 pt-2 border-t border-slate-800">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-300">Episodes to retrieve:</span>
+                        <span className="font-mono text-[#A78BFA]">{maxEpisodesRetrieved}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="5"
+                        value={maxEpisodesRetrieved}
+                        onChange={(e) => setMaxEpisodesRetrieved(Number(e.target.value))}
+                        className="w-full h-1.5 bg-slate-800 rounded appearance-none accent-[#7C3AED]"
+                      />
+                    </div>
+                  )}
+                </Card>
+
+                {/* Tier 4: Knowledge Graph */}
+                <Card className="border-slate-800 bg-slate-900/60 p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-purple-400" />
+                      <h4 className="font-semibold text-white text-sm">Tier 4 — Knowledge Graph</h4>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enableKnowledgeGraph}
+                        onChange={(e) => setEnableKnowledgeGraph(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#7C3AED]"></div>
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    FalkorDB graph tracking entity relations, topics, and frustration patterns across calls.
+                  </p>
+                </Card>
+              </div>
+
+              {/* MEMORY INJECTION PREVIEW */}
+              <Card className="border-slate-800 bg-slate-900/60 p-6 space-y-3">
+                <h4 className="font-semibold text-white text-sm flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-[#A78BFA]" />
+                  Memory Injection Prompt Preview
+                </h4>
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-emerald-400 overflow-x-auto leading-relaxed">
+                  <p className="text-slate-500">// Formatted [CONTACT MEMORY] block injected into system prompt:</p>
+                  <p className="text-[#A78BFA] mt-1">[CONTACT MEMORY]</p>
+                  <p>• Contact ID: contact_alex_01 | Name: Alex Johnson</p>
+                  {enableEpisodicMemory && (
+                    <p className="mt-1 text-slate-300">
+                      • Past Episode (2026-07-22): Inquired about PDF invoice download. Email verified and PDF dispatched.
+                    </p>
+                  )}
+                  {enableLongTermMemory && (
+                    <p className="mt-1 text-slate-300">
+                      • Semantic Fact [satisfaction: 0.6]: Prefers invoices sent directly via email.
+                    </p>
+                  )}
+                  {enableKnowledgeGraph && (
+                    <p className="mt-1 text-slate-300">
+                      • Graph Context: Mentioned [Invoice, Order #4091]. Frustrated about [Shipping Delay].
+                    </p>
+                  )}
+                </div>
+              </Card>
+
+              {/* Knowledge Graph Interactive Visualization */}
+              {enableKnowledgeGraph && (
+                <GraphMemoryViewer
+                  contactId="sample-agent-preview"
+                  contactName={agentName || 'Caller'}
+                  height={380}
+                />
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -877,6 +1105,146 @@ export default function AgentStudioPage({ params }: { params: { id: string } }) 
           )}
         </div>
       )}
+
+      {/* 7. INTENT TAB (M51 — 11th Tab) */}
+      {activeTab === 'intent' && (
+        <div className="space-y-6">
+          {/* Master Toggle Card */}
+          <Card className="border-slate-800 bg-slate-900/60 p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-[#A78BFA]" />
+                  <h3 className="text-lg font-semibold text-white">Voice-Adapted ICECoT Intent Engine</h3>
+                </div>
+                <p className="text-sm text-slate-400">
+                  Configure intent classification, required slot fill schemas, and Connector Resolution Chains (C6).
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enableIntent}
+                  onChange={(e) => setEnableIntent(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#7C3AED]"></div>
+              </label>
+            </div>
+          </Card>
+
+          {enableIntent && (
+            <>
+              {/* SECTION 1: INTENT REGISTRY */}
+              <Card className="border-slate-800 bg-slate-900/60 p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-white text-base">Intent Registry</h4>
+                    <p className="text-xs text-slate-400">Intents recognized by the agent during caller conversation turns.</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => setNewIntentModalOpen(true)}
+                    className="bg-[#7C3AED] hover:bg-[#6D28D9] text-white gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Intent</span>
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {definedIntents.map((intent) => (
+                    <div key={intent.id} className="border border-slate-800 rounded-xl p-4 bg-slate-950/60 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-white text-sm">{intent.name}</span>
+                          <code className="text-xs text-[#A78BFA] bg-[#7C3AED]/20 px-2 py-0.5 rounded font-mono">
+                            {intent.slug}
+                          </code>
+                        </div>
+                        <span className="text-xs text-slate-400 font-mono">
+                          Min Confidence: {intent.confidence_threshold}
+                        </span>
+                      </div>
+
+                      {/* SLOTS TO COLLECT */}
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-semibold text-slate-400 tracking-wider uppercase font-mono">
+                          Slots to Collect:
+                        </span>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {intent.slots.map((slot, sIdx) => (
+                            <span
+                              key={sIdx}
+                              className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 border font-mono ${
+                                slot.required
+                                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                                  : 'bg-slate-800/80 text-slate-300 border-slate-700'
+                              }`}
+                            >
+                              <span>{slot.required ? '✅' : '⚪'}</span>
+                              <span>{slot.name}</span>
+                              {slot.required && <span className="text-[10px] text-emerald-400 font-semibold">(required)</span>}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* RESOLUTION CHAIN */}
+                      <div className="space-y-1 pt-2 border-t border-slate-800">
+                        <span className="text-[11px] font-semibold text-slate-400 tracking-wider uppercase font-mono">
+                          Resolution Chain:
+                        </span>
+                        <div className="space-y-2 pt-1">
+                          {intent.resolution_chain.map((step, rIdx) => (
+                            <div key={rIdx} className="flex items-center gap-2 text-xs bg-slate-900 border border-slate-800 p-2.5 rounded-lg font-mono">
+                              <span className="text-[#A78BFA] font-bold">{rIdx + 1}.</span>
+                              <span className="text-white font-semibold">{step.connector}</span>
+                              <span className="text-slate-500">→</span>
+                              <span className="text-slate-300">{step.action}</span>
+                              <span className="text-emerald-400 ml-auto italic text-[11px]">"{step.on_success}"</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              {/* SECTION 2: EMOTION x INTENT COMBINED RULES */}
+              <Card className="border-slate-800 bg-slate-900/60 p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-white text-base">Emotion × Intent Combined Rules</h4>
+                    <p className="text-xs text-slate-400">Rules that fire when both emotion and intent reach defined confidence thresholds simultaneously.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {combinedRulesList.map((rule) => (
+                    <div key={rule.id} className="border border-[#7C3AED]/30 bg-[#7C3AED]/5 rounded-xl p-4 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-mono text-[#A78BFA]">
+                        <span className="font-bold">Rule ID: {rule.id}</span>
+                        <span className="bg-[#7C3AED]/20 px-2 py-0.5 rounded border border-[#7C3AED]/30">Action: {rule.action}</span>
+                      </div>
+                      <p className="text-xs text-slate-200 leading-relaxed font-sans">
+                        <span className="font-semibold text-white">IF</span> Intent is <code className="text-amber-300 font-mono">{rule.intent}</code>{' '}
+                        <span className="font-semibold text-white">AND</span> Emotion is <code className="text-rose-300 font-mono">{rule.emotion_condition}</code>{' '}
+                        <span className="font-semibold text-white">THEN</span> execute <code className="text-emerald-300 font-mono">{rule.action}</code>.
+                      </p>
+                      <p className="text-[11px] text-slate-400 bg-slate-950/80 p-2 rounded border border-slate-800 font-mono">
+                        Instruction: "{rule.instruction}"
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </>
+          )}
+        </div>
+      )}
+
 
       {/* 9. ANALYSIS TAB */}
       {activeTab === 'analysis' && (

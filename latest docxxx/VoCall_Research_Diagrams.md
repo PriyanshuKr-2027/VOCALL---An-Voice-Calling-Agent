@@ -301,7 +301,7 @@ graph LR
 ## TABLE 1 — Comparative Analysis of Existing Voice Agent Platforms
 
 | Feature | **VoCall** | **Vapi** | **Retell AI** | **OmniDim** | **Unpod** |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | **Persistent memory across calls** | ✅ 4-tier (Redis + pgvector + Postgres + FalkorDB) | ❌ No memory | ❌ No memory | ❌ No memory | ⚠️ Toggle only (no depth) |
 | **Short-term call memory** | ✅ Upstash Redis, TTL-based | ❌ | ❌ | ❌ | ❌ |
 | **Long-term semantic memory** | ✅ pgvector cosine similarity | ❌ | ❌ | ❌ | ❌ |
@@ -326,7 +326,7 @@ graph LR
 | **During-call connectors (function calling)** | ✅ Google Cal, HubSpot, Webhook, Supabase | ✅ | ✅ | ⚠️ | ✅ |
 | **Emotion arc visualization** | ✅ Per-call Recharts chart | ❌ | ❌ | ⚠️ Post-call | ❌ |
 | **Frustration threshold auto-trigger** | ✅ Configurable slider → connector | ❌ | ❌ | ❌ | ❌ |
-| **Background job orchestration** | ✅ Trigger.dev (no timeout) | Managed | Managed | Managed | Managed | ❌ |
+| **Background job orchestration** | ✅ Trigger.dev (no timeout) | ⚠️ Managed | ⚠️ Managed | ⚠️ Managed | ❌ |
 
 **Legend:** ✅ = Full support | ⚠️ = Partial / limited | ❌ = Not supported
 
@@ -335,7 +335,7 @@ graph LR
 ## TABLE 2 — STT Provider Comparison (for Research Paper)
 
 | Provider | Model | Language Support | Latency | Hinglish Accuracy | Pricing | Selected For |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | **Groq Whisper** | Whisper large-v3 | 57 languages (EN primary) | ~150ms | Poor (forces one language) | Free tier | VoCall EN STT |
 | **Sarvam AI Saarika** | Saarika v2 | Hindi, Hinglish, 10 Indian languages | ~200ms | Excellent (natively trained) | Free developer tier | VoCall HI/Hinglish STT |
 | OpenAI Whisper (API) | Whisper large-v3 | 57 languages | ~800ms | Poor | Paid ($0.006/min) | Rejected (latency) |
@@ -349,7 +349,7 @@ graph LR
 ## TABLE 3 — TTS Provider Comparison (for Research Paper)
 
 | Provider | Model | Language | TTFAB | Hinglish | Emotion-Conditioned | Pricing | Selected For |
-|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | **Cartesia** | Sonic-2 | EN | ~80ms | ❌ | ❌ | Free tier | VoCall EN TTS |
 | **Sarvam AI** | Bulbul v2 | HI/Hinglish/10 Indian | ~150ms | ✅ Natural | ❌ | Free developer tier | VoCall HI TTS |
 | **Hume AI** | Octave 2 | EN | ~75ms | ❌ | ✅ (unique) | Free: 10K chars/mo | VoCall Emotion TTS |
@@ -363,7 +363,7 @@ graph LR
 ## TABLE 4 — LLM Provider Comparison (for Research Paper)
 
 | Provider | Model | Context Window | First-Token Latency | Free Tier | Hinglish | Fallback Role |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | **Groq** | llama-3.3-70b-versatile | 128K tokens | ~400ms | ✅ (generous RPM) | ✅ Native | Primary LLM |
 | **Cerebras** | llama-3.3-70b | 128K tokens | ~200ms | ✅ 1M tokens/day | ✅ Native | Fallback (on 429) |
 | OpenAI | GPT-4o | 128K tokens | ~800ms | ❌ Paid | ✅ | Rejected (cost) |
@@ -376,7 +376,7 @@ graph LR
 ## TABLE 5 — Memory System Comparison: VoCall vs Existing Work
 
 | Dimension | **VoCall (Proposed)** | **Mem0** | **Zep** | **MemGPT** | **Vapi/Retell (baseline)** |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | **Architecture** | 4-tier (Redis + pgvector + Postgres + FalkorDB) | Unified vector store | Vector + entity store | Virtual context manager | None |
 | **Short-term (within call)** | ✅ Redis, TTL-based | ❌ | ❌ | ⚠️ Context window only | ❌ |
 | **Long-term semantic** | ✅ pgvector, cosine similarity | ✅ | ✅ | ✅ | ❌ |
@@ -394,7 +394,7 @@ graph LR
 ## TABLE 6 — Emotion Detection Approach Comparison
 
 | Approach | Signal Type | Latency | Accuracy | Real-Time Capable | Used In Prior Systems |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | **VoCall Text NLP (Groq)** | Text transcript | ~120ms | Moderate | ✅ Per-turn | Rare in voice agents |
 | **VoCall Audio (Hume AI)** | Raw audio paralinguistic | ~180ms | High | ✅ Streaming | ❌ Not in voice agent platforms |
 | **VoCall Fusion (proposed)** | Text + Audio weighted | ~200ms | High | ✅ Per-turn | ❌ Novel contribution |
@@ -409,7 +409,7 @@ graph LR
 ## TABLE 7 — Performance Requirements vs Targets (System Design Table)
 
 | Component | Metric | VoCall Target | Industry Baseline | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **Full pipeline (TTFAB)** | Time to first audio byte | < 800ms | 1200–2000ms | Groq LPU advantage |
 | **STT (English)** | Transcription latency | < 150ms | 300–500ms | Groq Whisper on LPU |
 | **STT (Hinglish)** | Transcription latency | < 200ms | N/A (no baseline) | Novel: Sarvam Saarika |
@@ -429,12 +429,13 @@ graph LR
 ## TABLE 8 — Research Contributions Mapping
 
 | # | Novel Contribution | System Component | Research Claim | Evaluation Method |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **C1** | 4-tier persistent memory for voice agents | Redis + pgvector + Postgres + FalkorDB | First voice agent platform implementing 4-tier memory hierarchy | A/B test: memory vs no-memory baseline — context relevance score, caller recall |
 | **C2** | Dual-signal real-time emotion detection | Groq NLP + Hume AI + Fusion Layer | Fusion of text NLP + audio paralinguistic signals > either signal alone for real-time accuracy | Agreement rate vs ground truth labels; ablation study (text-only vs audio-only vs fused) |
 | **C3** | Emotion-conditioned memory retrieval | retriever.py + emotion_state tags | Emotion context improves memory relevance for returning callers | Relevance score comparison: tagged vs untagged retrieval |
 | **C4** | Hinglish-native voice agent pipeline | Sarvam Saarika + Bulbul + LLM instruction | First end-to-end voice agent platform with Hinglish code-switching STT/TTS | WER on Hinglish test set; naturalness MOS score; code-switching preservation rate |
 | **C5** | Knowledge graph memory for voice agents | FalkorDB + Cypher queries | Graph-structured contact memory captures cross-session entity relationships that flat vector stores cannot | Precision/recall of entity relationship retrieval; frustration pattern detection accuracy |
+| **C6** | Voice-Agent Intent, Slot & Emotion Chain-of-Thought (VA-ICECoT) | app/services/intent/ & va_icecot.py | Dual-matrix of Intent Classification + Dynamic Slot Resolution + Emotion Rules improves task automation completion | Slot resolution accuracy (>95%), connector execution success rate, compliance audit pass rate |
 | **Bonus** | Emotion-conditioned voice generation | Hume Octave 2 integration | Dynamic TTS tone adaptation based on detected caller emotion reduces call escalation rate | Caller satisfaction survey; escalation rate comparison (adaptive vs static TTS) |
 
 ---
@@ -442,7 +443,7 @@ graph LR
 ## TABLE 9 — Open-Source Voice Agent Platform Comparison (Deployment Model)
 
 | Platform | License | Self-Hostable | BYOK | Free Tier | India-First | Memory | Emotion |
-|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | **VoCall** | MIT | ✅ Docker Compose | ✅ 9 providers | ✅ All free tiers | ✅ | ✅ 4-tier | ✅ Dual-signal |
 | Unpod | MIT | ✅ | ❌ | ✅ | ⚠️ Partial | ⚠️ Toggle only | ❌ |
 | Pipecat (framework) | BSD-2 | ✅ | ✅ | ✅ | ❌ | ❌ (framework only) | ❌ |
@@ -456,7 +457,7 @@ graph LR
 ## TABLE 10 — Technology Stack Summary (for Paper Section 3: System Design)
 
 | Layer | Component | Technology | Version | Justification |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **Frontend** | Web app | Next.js | 14 (App Router) | SSR, file-based routing, Vercel deploy |
 | **Backend** | API server | FastAPI | Latest | Async Python, Pipecat-compatible, fast |
 | **Primary DB** | Relational store | Supabase Postgres | — | RLS, Realtime, free tier |

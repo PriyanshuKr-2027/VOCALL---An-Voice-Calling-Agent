@@ -7,15 +7,19 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Node & Build Outputs
+node_modules/
+dist/
+dist-ssr/
+.next/
+.out/
+*.tsbuildinfo
 *.local
 
-# Editor directories and files
+# Editor & OS files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -30,16 +34,22 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+ENV/
+env/
 
-# Environment and Build
+# Environment Variables & Secrets
 .env
-.env*.local
-*.tsbuildinfo
-.next/
-.out/
+.env.*
+!.env.example
 
-# Worktrees
+# Research PDFs & Heavy Media Binaries
+*.pdf
+latest docxxx/*.pdf
+
+# Local Test Results & Benchmark Outputs
+scripts/results.json
+results.json
+
+# Worktrees & Prototype Folders
 Ananya frontend/
 abhishek ui/
-
-

@@ -733,8 +733,59 @@ export default function CallDetailPage({ params }: { params: { id: string } }) {
               {renderGraphContextPanel()}
             </CardContent>
           </Card>
+
+          {/* INTENT ARC SECTION (M54) */}
+          <Card className="border-slate-800 bg-slate-900/60">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[#A78BFA]">
+                  <Zap className="w-4 h-4" />
+                  <CardTitle className="text-sm text-white">Intent Arc & Connector Resolution</CardTitle>
+                </div>
+                <span className="text-[10px] font-mono bg-[#7C3AED]/20 text-[#A78BFA] px-2 py-0.5 rounded border border-[#7C3AED]/30">
+                  VA-ICECoT (C6)
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 p-4 pt-2">
+              <div className="space-y-2">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Detected Intent Flow:</span>
+                <div className="flex flex-wrap gap-2">
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2 text-xs space-y-1">
+                    <div className="flex items-center justify-between gap-3 font-mono">
+                      <span className="font-semibold text-emerald-300">book_appointment</span>
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">0.88 Conf</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 font-sans italic">"To schedule a product demo call for next Tuesday."</p>
+                    <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                      <span>Slots: date=2026-08-04, time=14:00</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-mono font-semibold">
+                      ⚡ Connector Fired: google_calendar (create_event)
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 space-y-1 font-mono">
+                <div className="flex justify-between">
+                  <span>Primary Intent:</span>
+                  <span className="text-white font-semibold">Book Appointment</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Slot Resolution Status:</span>
+                  <span className="text-emerald-400 font-semibold">100% Complete</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Connectors Fired:</span>
+                  <span className="text-purple-400 font-semibold">Google Calendar</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
   );
 }
+

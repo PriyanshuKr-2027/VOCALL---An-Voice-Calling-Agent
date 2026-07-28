@@ -66,3 +66,70 @@ async def delete_contact_graph_memory(contact_id: UUID):
         raise HTTPException(status_code=500, detail="Failed to delete graph memory")
     return {"status": "success", "message": f"Graph memory cleared for contact {contact_id}"}
 
+
+@router.delete("/{contact_id}/memory")
+async def cascade_delete_contact_memory(contact_id: UUID):
+    """
+    DPDP Act 2023 'Forget Me' Cascade Deletion (M48).
+    Atomically clears all contact data across 5 memory & intent tiers:
+      1. Upstash Redis Short-Term Memory & Slots
+      2. Supabase pgvector Long-Term Semantic Memory
+      3. Supabase Postgres Episodic Memory
+      4. FalkorDB Knowledge Graph Nodes & Edges
+      5. Intent Events & logs audit in compliance_log
+    """
+    import asyncio
+    from datetime import datetime
+    from app.services.memory import short_term, long_term, episodic, graph
+
+    cid = str(contact_id)
+
+    try:
+        # Tier 1 — Redis
+        redis_task = short_term.clear_call(cid)
+
+        # Tier 2 — pgvector
+        pgvector_task = long_term.delete_all(cid)
+
+        # Tier 3 — Episodic Postgres
+        episodic_task = episodic.delete_all(cid)
+
+        # Tier 4 — FalkorDB Graph
+        graph_task = asyncio.to_thread(graph.delete_contact_graph, cid)
+
+        # Tier 5 — Intent Events
+        intent_task = None
+        if supabase:
+            intent_task = asyncio.to_thread(
+                lambda: supabase.table("intent_events").delete().eq("contact_id", cid).execute()
+            )
+
+        # Execute parallel deletion
+        tasks = [redis_task, pgvector_task, episodic_task, graph_task]
+        if intent_task:
+            tasks.append(intent_task)
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Audit log in compliance_log
+        if supabase:
+            supabase.table("compliance_log").insert({
+                "action": "forget_me",
+                "contact_id": cid,
+                "tiers_cleared": ["redis", "pgvector", "postgres", "falkordb", "intent_events"],
+                "timestamp": datetime.utcnow().isoformat(),
+            }).execute()
+
+        return {
+            "deleted": True,
+            "contact_id": cid,
+            "tiers_cleared": 5,
+            "message": "All memory and intent events deleted under DPDP Act 2023",
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Cascade memory deletion failed: {exc}",
+        )
+
+

@@ -9,24 +9,29 @@
 ## 1. Agent Studio & Builder Suite
 
 ### 1.1 Prompt-First Agent Creation
+
 - **Capability:** Free-text system instruction box serving as the primary agent configuration interface.
 - **Provider & Implementation:** Supabase Postgres (`agents.system_prompt`).
 - **Rationale:** Reduces onboarding friction compared to multi-step wizard forms.
 
 ### 1.2 AI Prompt Enhancer
+
 - **Capability:** One-click enhancement that restructures and optimizes rough prompt drafts into high-performing voice agent prompts.
 - **Provider & Implementation:** Groq LPU (`llama-3.3-70b-versatile`) via endpoint `POST /api/agents/{id}/enhance-prompt`.
 - **Rationale:** ~400ms latency ensures instant UI response without interrupting developer flow.
 
 ### 1.3 Pre-Built Use Case Templates
+
 - **Capability:** One-click template chips (Customer Support, Sales Qualification, Appointment Booking, Healthcare Triage, Debt Recovery, HR Screening).
 - **Provider & Implementation:** Frontend preset registry appending domain-specific guidelines into prompt.
 
 ### 1.4 Dual UI / Code View Editor
+
 - **Capability:** Toggle between structured visual form controls and a syntax-highlighted raw JSON config editor (`agents.config`).
 - **Provider & Implementation:** Next.js frontend state renderer + Monaco/JSON syntax view.
 
 ### 1.5 Web Domain Metadata Scraper
+
 - **Capability:** Paste company website URL to automatically extract business name, service description, and brand voice guidelines.
 - **Provider & Implementation:** FastAPI Scraper (`/api/import-domain`) parsing OpenGraph and meta tags.
 
@@ -37,14 +42,14 @@
 ### 2.1 Speech-to-Text (STT) Routing
 
 | Language Target | Provider | Model | Latency | Key Rationale |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **English** | Groq | Whisper Large-v3 | ~150ms | Ultra-fast LPU inference, high word accuracy rate |
 | **Hindi / Hinglish** | Sarvam AI | Saarika v2 | ~200ms | Native code-switching training; handles natural mixed Hindi-English speech |
 
 ### 2.2 Text-to-Speech (TTS) Routing
 
 | Mode / Language | Provider | Model | TTFAB Latency | Key Rationale |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **English (Standard)** | Cartesia | Sonic-2 | ~80ms | Lowest latency English synthesis available |
 | **Hindi / Hinglish** | Sarvam AI | Bulbul v2 | ~150ms | Natural Indian accent & language cadence |
 | **Emotion-Conditioned** | Hume AI | Octave 2 | ~75ms | Modulates pitch, warmth, and speed based on caller emotion score |
@@ -54,18 +59,22 @@
 ## 3. Dual-Signal Emotion Engine
 
 ### 3.1 Acoustic Emotion Signal (Audio)
+
 - **Capability:** Extracts paralinguistic tone features (pitch, cadence, stress) from raw speech audio.
 - **Provider:** Hume AI Expression Measurement API.
 
 ### 3.2 NLP Emotion Signal (Text)
+
 - **Capability:** Real-time sentiment and intent analysis on caller speech transcripts per turn.
 - **Provider:** Groq LLaMA 3.3 70B (JSON Mode).
 
 ### 3.3 Multimodal Emotion Fusion
+
 - **Capability:** Computes unified valence and arousal state ($Valence_{fused} = 0.6 \cdot Audio + 0.4 \cdot Text$).
 - **Provider:** Custom FastAPI Fusion Engine.
 
 ### 3.4 Adaptive Voice & Prompt Behaviors
+
 - **Empathetic Prompt Injection:** Automatically injects tone-softening guidelines into the system prompt when caller valence drops below -0.4.
 - **Voice Pitch Adaptation:** Modulates Hume Octave TTS voice warmth and speed based on caller emotion.
 - **Automated Escalation Triggers:** Fires connectors (human agent handoff or priority webhook) when frustration score exceeds 0.7.
@@ -74,7 +83,7 @@
 
 ## 4. 4-Tier Hybrid Memory Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                4-TIER HYBRID MEMORY MATRIX                              │
 ├─────────────────┬───────────────────┬───────────────────┬───────────────────────────────┤
@@ -117,4 +126,30 @@
 - **Post-Call Pipeline (Trigger.dev):** Asynchronous evaluation, summary generation, fact embedding, graph updating, and WhatsApp/Email dispatching.
 
 ---
-*Updated and Maintained by VoCall Engineering*
+
+## 8. Intent Engine & VA-ICECoT (Voice-Agent Intent, Slot & Emotion Chain-of-Thought)
+
+### 8.1 Intent Classification & Dynamic Slot Extraction
+
+- **Capability:** High-confidence intent classification (`detector.py`) with zero-shot slot extraction and validation (`slot_manager.py`).
+- **Implementation:** REST & WebSocket pipeline integration (`/api/intent/detect`, `/api/intent/resolve`).
+- **Rationale:** Tracks caller goals (e.g., `book_appointment`, `file_complaint`, `request_refund`) in real-time with confidence scoring (e.g., 0.88).
+
+### 8.2 Dynamic Slot Resolution & Connector Chains
+
+- **Capability:** Evaluates required vs. optional slots during dialogue turns; automatically triggers associated backend connectors (e.g., Google Calendar `create_event`, HubSpot CRM `update_lead`) upon 100% slot resolution.
+- **Provider:** `resolver.py` orchestrating internal tool/connector bindings.
+
+### 8.3 Emotion × Intent Matrix Rules
+
+- **Capability:** Multi-dimensional rule engine evaluating simultaneous emotion valence/frustration thresholds and intent states.
+- **Example Rule:** `IF Intent == "cancel_subscription" AND Emotion == "frustrated" THEN execute "escalate_to_human_supervisor" WITH instruction "Transfer call immediately with high-priority tag"`.
+- **Implementation:** `combined_rules.py` integrated into Pipecat real-time turn loop.
+
+### 8.4 Call Compliance & Guardrail Engine
+
+- **Capability:** `va_icecot.py` monitoring mandatory disclosures (e.g., call recording consent, regulatory disclaimers) and verifying compliance before executing sensitive transactions.
+
+---
+
+Updated and Maintained by VoCall Engineering.

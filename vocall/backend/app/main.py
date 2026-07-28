@@ -14,6 +14,7 @@ from app.routers import (
     webhooks,
     memory,
     emotion,
+    intent,
 )
 
 app = FastAPI(
@@ -44,6 +45,8 @@ app.include_router(api_keys.router, prefix=api_v1_prefix)
 app.include_router(webhooks.router, prefix=api_v1_prefix)
 app.include_router(memory.router, prefix=api_v1_prefix)
 app.include_router(emotion.router, prefix=api_v1_prefix)
+app.include_router(intent.router, prefix=api_v1_prefix)
+
 
 
 @app.get("/")

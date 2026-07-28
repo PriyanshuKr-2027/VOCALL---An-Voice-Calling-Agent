@@ -11,7 +11,7 @@
 
 VoCall utilizes a five-tier microservices architecture separating real-time voice streaming from data storage and asynchronous background evaluation tasks:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                     CLIENT LAYER                                        │
 │   Next.js 14 Frontend (Vercel)                                                          │
@@ -22,6 +22,7 @@ VoCall utilizes a five-tier microservices architecture separating real-time voic
 │                                      API LAYER                                          │
 │   FastAPI Backend Service (Railway / Docker)                                            │
 │   Auth | Agent Router | Call Controller | 4-Tier Memory RAG | Emotion Fusion Engine     │
+│   Intent & Compliance Router | VA-ICECoT Engine (Intent/Slot Classifier & Combined Rules) │
 └────┬──────────────┬──────────────┬──────────────┬──────────────┬────────────────────────┘
      │              │              │              │              │
 ┌────▼────┐   ┌─────▼────┐   ┌─────▼────┐   ┌─────▼────┐   ┌─────▼────────────────────────┐
@@ -41,7 +42,7 @@ VoCall utilizes a five-tier microservices architecture separating real-time voic
 
 ## 2. Real-Time Media & Voice Pipeline (Pipecat + LiveKit)
 
-```
+```text
 Caller Phone / Web Browser ("Ananya UI")
          │
          ├── [WebCall] WebRTC SRTP Stream  --> LiveKit Room (LiveKit Cloud)
@@ -59,10 +60,14 @@ Caller Phone / Web Browser ("Ananya UI")
      │     - Audio Signal: Hume AI Expression API                                                  │
      │     - Text Signal: Groq LLaMA 3.3 70B JSON sentiment                                       │
      │     - Fused Valence = 0.6 * Audio + 0.4 * Text                                             │
-     │  4. LLM Generation: Groq LLaMA 3.3 70B (Streaming, TTFT ~150ms)                             │
-     │     - If Valence < -0.40: Prepend Empathetic Tone Instruction                               │
-     │  5. TTS Synthesis: Cartesia Sonic-2 (sub-80ms) OR Sarvam Bulbul / Hume Octave 2            │
-     │  6. Push Audio Frame to WebRTC Output Track & Append turn to Upstash Redis stm:{call_id}    │
+     │  4. VA-ICECoT Engine & Intent Resolution:                                                   │
+     │     - Intent Classification & Slot Extraction (`detector.py` / `slot_manager.py`)          │
+     │     - Emotion x Intent Combined Rules Evaluation (`combined_rules.py`)                     │
+     │     - Auto-fire Resolution Chain Connectors on 100% Slot Completion (`resolver.py`)        │
+     │  5. LLM Generation: Groq LLaMA 3.3 70B (Streaming, TTFT ~150ms)                             │
+     │     - If Valence < -0.40 OR Combined Rule Fired: Inject Adaptive Tone Instruction           │
+     │  6. TTS Synthesis: Cartesia Sonic-2 (sub-80ms) OR Sarvam Bulbul / Hume Octave 2            │
+     │  7. Push Audio Frame to WebRTC Output Track & Append turn to Upstash Redis stm:{call_id}    │
      └─────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,7 +75,7 @@ Caller Phone / Web Browser ("Ananya UI")
 
 ## 3. 4-Tier Parallel Memory RAG Engine
 
-```
+```text
                                   INBOUND CALL START
                                           │
                         FastAPI Parallel Memory Fanout (`retrieve_all_memory`)
@@ -103,7 +108,7 @@ Caller Phone / Web Browser ("Ananya UI")
 
 ## 4. Post-Call Async Pipeline Architecture (Trigger.dev)
 
-```
+```text
                                       CALL ENDED EVENT
                                               │
                               Trigger.dev Task Fired (No Timeout)
@@ -126,7 +131,7 @@ Caller Phone / Web Browser ("Ananya UI")
 
 ## 5. Hinglish Code-Switching Pipeline
 
-```
+```text
 Caller Audio (Hindi / English / Hinglish Mix)
         │
    Language Router (Sarvam AI auto-detects or agent configuration)
@@ -152,6 +157,7 @@ Caller Audio (Hindi / English / Hinglish Mix)
 ## 7. Deployment Topology
 
 ### 7.1 Serverless Cloud Deployment (Recommended)
+
 - **Frontend App:** Vercel (Next.js 14 App Router).
 - **Backend API:** Railway Container / AWS ECS (FastAPI + Pipecat).
 - **Databases:** Supabase Cloud (Postgres + pgvector), Upstash Redis Cloud, FalkorDB Cloud.
@@ -159,6 +165,7 @@ Caller Audio (Hindi / English / Hinglish Mix)
 - **Background Jobs:** Trigger.dev Cloud.
 
 ### 7.2 Self-Hosted Docker Compose (`docker-compose.yml`)
+
 - Single or multi-node container orchestration for isolated enterprise environments:
   - `next-frontend` (Port 3000)
   - `fastapi-backend` (Port 8000)
@@ -168,4 +175,5 @@ Caller Audio (Hindi / English / Hinglish Mix)
   - `falkordb` (Port 6379 / 6380)
 
 ---
-*Approved and Maintained by VoCall Architecture Team*
+
+Approved and Maintained by VoCall Architecture Team.
