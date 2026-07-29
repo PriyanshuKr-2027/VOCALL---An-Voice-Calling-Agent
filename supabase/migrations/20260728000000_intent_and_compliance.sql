@@ -1,6 +1,6 @@
 -- Migration: 20260728000000_intent_and_compliance.sql
 -- Description: Adds intent_events and compliance_log tables for VoCall Intent Engine & DPDP Compliance
-
+-- Created By: Ananya Gupta
 CREATE TABLE IF NOT EXISTS public.intent_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     call_id UUID NOT NULL REFERENCES public.calls(id) ON DELETE CASCADE,

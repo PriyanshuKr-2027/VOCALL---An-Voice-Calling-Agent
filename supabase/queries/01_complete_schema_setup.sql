@@ -1,3 +1,4 @@
+--Created By: Ananya Gupta
 -- =============================================================================
 -- VOCALL COMPLETE SUPABASE DATABASE SETUP SCRIPT
 -- Run this script in the Supabase Dashboard SQL Editor to set up the database.

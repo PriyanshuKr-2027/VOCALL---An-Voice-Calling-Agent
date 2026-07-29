@@ -58,13 +58,4 @@ abhishek ui/
 .agents/
 skills-lock.json
 
-# Untracked tests and connectors for team member push
-tests/
-vocall/backend/tests/
-app/services/connectors/
-app/routers/connectors.py
-vocall/backend/app/services/connectors/
-vocall/backend/app/routers/connectors.py
-vocall/frontend/src/components/connectors/
-vocall/frontend/src/app/dashboard/connectors/
-vocall/frontend/src/app/api/connectors/
+

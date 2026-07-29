@@ -1,5 +1,5 @@
 -- Migration: Create connector_configs table
--- Created at: 2026-07-22
+-- Created by: Ananya Gupta
 
 -- Enable moddatetime extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS moddatetime SCHEMA extensions;
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.connector_configs (
             'salesforce',
             'supabase',
             'postgres',
-            'slack',
+            'slack', 
             'whatsapp',
             'zapier',
             'custom_webhook'

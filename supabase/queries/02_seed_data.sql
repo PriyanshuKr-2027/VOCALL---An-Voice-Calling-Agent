@@ -1,3 +1,4 @@
+-- Created By: Ananya Gupta
 -- =============================================================================
 -- VOCALL OPTIONAL SEED DATA SCRIPT
 -- Run this after 01_complete_schema_setup.sql if you want sample test data.
